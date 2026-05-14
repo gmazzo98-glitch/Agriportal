@@ -1,0 +1,34 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Large data files — useless as agent context
+*.xlsx
+*.xls
+*.zip
+*.csv
+
+# Logs and temp files
+*.log
+*.tmp
+
+# VS Code internals
+.vscode/
+
+# Streamlit cache and secrets
+.streamlit/
+
+# Git internals
+.git/
+
+# Node (if ever added)
+node_modules/
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
