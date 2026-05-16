@@ -5,3 +5,8 @@ plotly
 pydeck
 supabase
 streamlit-javascript
+streamlit
+folium
+streamlit-folium
+reportlab
+kaleido
