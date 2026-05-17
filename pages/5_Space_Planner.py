@@ -12,6 +12,8 @@ import plotly.graph_objects as go
 
 st.set_page_config(layout="wide", page_title="CEA Space Planner", page_icon="🏗️")
 inject_styles()
+from core.auth import require_login
+require_login()
 
 @st.cache_resource
 def get_supabase() -> Client:
@@ -3338,5 +3340,7 @@ elif active_farm:
     st.divider()
     st.info(
         "☀️ Solar analysis requires farm coordinates. "
+        "Add lat/lon to the farm profile in the ROI Calculator to enable this panel."
+    )
         "Add lat/lon to the farm profile in the ROI Calculator to enable this panel."
     )

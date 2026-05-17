@@ -19,6 +19,8 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Harvest Tracker", page_icon="🌿", layout="wide")
 inject_styles()
+from core.auth import require_login
+require_login()
 st.title("🌿 Harvest Tracker")
 
 @st.cache_resource

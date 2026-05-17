@@ -24,6 +24,7 @@ from core.aquaponics_calculate import calculate_aquaponics, calculate_fish, COUN
 from core.data_tables import COUNTRIES, CROPS, LIGHTS
 from core.climate import fetch_climate_profile, compute_natural_dli_fraction
 from core._styles import inject_styles
+from core.auth import require_login, current_user
 from core.farm_context import render_farm_context_sidebar, load_farm, clear_farm, MODALITY_RADIO
 import json
 from supabase import create_client, Client
@@ -36,6 +37,7 @@ supabase = get_supabase()
 
 st.set_page_config(page_title="ROI Calculator", page_icon="📊", layout="wide")
 inject_styles()
+require_login()
 
 def _render_farm_selector_sidebar():
     """
@@ -1225,7 +1227,7 @@ if modality == "🏭 Indoor Vertical Farm":
                             st.error("Please enter a name for the new farm profile.")
                         else:
                             try:
-                                supabase.table("farms").insert({**_vf_payload, "name": farm_profile_name.strip()}).execute()
+                                supabase.table("farms").insert({**_vf_payload, "name": farm_profile_name.strip(), "owner_id": current_user()}).execute()
                                 st.success(f"✅ New farm profile '{farm_profile_name.strip()}' saved.")
                                 st.session_state["show_save_farm_form"] = False
                                 st.rerun()
@@ -1246,7 +1248,7 @@ if modality == "🏭 Indoor Vertical Farm":
                             st.error("Please enter a farm name.")
                         else:
                             try:
-                                supabase.table("farms").insert({**_vf_payload, "name": farm_profile_name.strip()}).execute()
+                                supabase.table("farms").insert({**_vf_payload, "name": farm_profile_name.strip(), "owner_id": current_user()}).execute()
                                 st.success(f"Farm profile '{farm_profile_name.strip()}' saved.")
                                 st.session_state["show_save_farm_form"] = False
                                 st.rerun()
@@ -2642,7 +2644,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                             st.error("Please enter a name for the new farm profile.")
                         else:
                             try:
-                                supabase.table("farms").insert({**_gh_payload, "name": gh_farm_name.strip()}).execute()
+                                supabase.table("farms").insert({**_gh_payload, "name": gh_farm_name.strip(), "owner_id": current_user()}).execute()
                                 st.success(f"✅ New farm profile '{gh_farm_name.strip()}' saved.")
                                 st.session_state["gh_show_save_form"] = False
                                 st.rerun()
@@ -2663,7 +2665,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                             st.error("Please enter a farm name.")
                         else:
                             try:
-                                supabase.table("farms").insert({**_gh_payload, "name": gh_farm_name.strip()}).execute()
+                                supabase.table("farms").insert({**_gh_payload, "name": gh_farm_name.strip(), "owner_id": current_user()}).execute()
                                 st.success(f"Farm profile '{gh_farm_name.strip()}' saved.")
                                 st.session_state["gh_show_save_form"] = False
                                 st.rerun()
@@ -4349,7 +4351,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                             st.error("Please enter a name for the new farm profile.")
                         else:
                             try:
-                                supabase.table("farms").insert({**_aq_payload, "name": aq_farm_name.strip()}).execute()
+                                supabase.table("farms").insert({**_aq_payload, "name": aq_farm_name.strip(), "owner_id": current_user()}).execute()
                                 st.success(f"✅ New farm profile '{aq_farm_name.strip()}' saved.")
                                 st.session_state["aq_show_save_form"] = False
                                 st.rerun()
@@ -4370,7 +4372,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                             st.error("Please enter a farm name.")
                         else:
                             try:
-                                supabase.table("farms").insert({**_aq_payload, "name": aq_farm_name.strip()}).execute()
+                                supabase.table("farms").insert({**_aq_payload, "name": aq_farm_name.strip(), "owner_id": current_user()}).execute()
                                 st.success(f"Farm profile '{aq_farm_name.strip()}' saved.")
                                 st.session_state["aq_show_save_form"] = False
                                 st.rerun()

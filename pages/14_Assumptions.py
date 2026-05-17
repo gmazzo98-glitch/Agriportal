@@ -1,6 +1,8 @@
 import streamlit as st
 
 st.set_page_config(page_title="Assumptions & Methodology", page_icon="📋", layout="wide")
+from core.auth import require_login, render_user_admin, logout, current_user
+require_login()
 
 st.title("📋 Assumptions & Methodology")
 st.markdown(
@@ -1025,3 +1027,12 @@ st.caption(
     "have been verified to produce results consistent with the Excel model for validated benchmark "
     "scenarios. For questions about methodology, contact the portal administrator."
 )
+
+st.divider()
+st.markdown("## ⚙️ Account Settings")
+_ac1, _ac2 = st.columns([5,1])
+_ac1.markdown(f"Signed in as **{current_user()}**")
+if _ac2.button("Sign out", use_container_width=True):
+    logout()
+st.divider()
+render_user_admin()

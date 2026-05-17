@@ -5,6 +5,7 @@ from supabase import create_client, Client
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core._styles import inject_styles
+from core.auth import require_login, current_user, logout
 from core.farm_context import (
     load_farm, clear_farm, get_active_farm,
     MODALITY_LABELS, MODALITY_RADIO, MODALITY_COLOURS,
@@ -18,6 +19,7 @@ st.set_page_config(
     layout="wide",
 )
 inject_styles()
+require_login()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DESIGN — "Workspace, not catalogue."
@@ -721,13 +723,21 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ── User info + logout ────────────────────────────────────────────────────────
+_uc1, _uc2 = st.columns([6, 1])
+with _uc1:
+    st.caption(f"Signed in as **{current_user()}**")
+with _uc2:
+    if st.button("Sign out", use_container_width=True):
+        logout()
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Load farms
+# Load farms — filtered to current user
 # ──────────────────────────────────────────────────────────────────────────────
 try:
     _resp = supabase.table("farms").select(
         "id, name, modality, country, crop, footprint, created_at, model_updated_at, lat, lon"
-    ).order("created_at", desc=True).execute()
+    ).eq("owner_id", current_user()).order("created_at", desc=True).execute()
     _farms = _resp.data or []
 except Exception as e:
     _farms = []
@@ -994,6 +1004,8 @@ def _render_farm_setup():
                 # Remove auxiliary keys not present in the database schema
                 for _k in ["multi_crop", "crop_mix", "tank_volume_m3"]:
                     _final.pop(_k, None)
+
+                _final["owner_id"] = current_user()
 
                 try:
                     _resp = supabase.table("farms").insert(_final).execute()

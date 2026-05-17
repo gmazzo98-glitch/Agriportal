@@ -536,6 +536,9 @@ def execute_farm_save(link_mode, target_farm, new_farm_name, plat, plng, matched
 
 st.set_page_config(page_title="Farm Intelligence Map", page_icon="🗺️", layout="wide")
 inject_styles()
+from core.auth import require_login
+from core.auth import require_login
+require_login()
 st.title("🗺️ Farm Intelligence Map")
 st.markdown(
     "Explore your farm's environment through multiple intelligence layers. "
