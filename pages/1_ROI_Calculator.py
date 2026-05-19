@@ -726,365 +726,555 @@ if modality == "🏭 Indoor Vertical Farm":
     # ── PDF Report Generator ──────────────────────────────────────────────────
     def generate_pdf_report(inputs: dict, r: dict) -> bytes:
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(
-            buffer,
-            pagesize=A4,
-            rightMargin=2*cm, leftMargin=2*cm,
-            topMargin=2*cm, bottomMargin=2*cm,
-        )
-        styles = getSampleStyleSheet()
-        W = A4[0] - 4*cm  # usable page width
-    
-        # ── Colour constants ──────────────────────────────────────────────────────
-        GREEN     = colors.HexColor("#00e5a0")
-        DARK_BG   = colors.HexColor("#1a1a2e")
-        LIGHT_ROW = colors.HexColor("#f7f7f7")
-        MID_GREY  = colors.HexColor("#8892a0")
-        RED_COL   = colors.HexColor("#ff4d4d")
-        AMBER     = colors.HexColor("#ffc13d")
-    
-        # ── Paragraph styles ──────────────────────────────────────────────────────
+        doc = SimpleDocTemplate(buffer, pagesize=A4,
+                                rightMargin=2*cm, leftMargin=2*cm,
+                                topMargin=2*cm, bottomMargin=2*cm)
+        W = A4[0] - 4*cm
+        GREEN    = colors.HexColor("#00e5a0")
+        DARK_BG  = colors.HexColor("#1a1a2e")
+        LIGHT_ROW= colors.HexColor("#f7f7f7")
+        MID_GREY = colors.HexColor("#8892a0")
+        RED_COL  = colors.HexColor("#ff4d4d")
+        AMBER    = colors.HexColor("#ffc13d")
+
         def ps(name, size, color, bold=False, align=TA_LEFT, space_before=0, space_after=4):
-            return ParagraphStyle(
-                name, fontSize=size,
-                textColor=color,
+            return ParagraphStyle(name, fontSize=size, textColor=color,
                 fontName="Helvetica-Bold" if bold else "Helvetica",
-                alignment=align,
-                spaceBefore=space_before,
-                spaceAfter=space_after,
-                leading=size * 1.35,
-            )
-    
-        s_title    = ps("Title",    22, DARK_BG,   bold=True,  align=TA_LEFT,   space_after=2)
-        s_subtitle = ps("Sub",      10, MID_GREY,  bold=False, align=TA_LEFT,   space_after=14)
-        s_section  = ps("Section",  12, DARK_BG,   bold=True,  align=TA_LEFT,   space_before=10, space_after=5)
-        s_body     = ps("Body",      9, colors.HexColor("#2c2c2c"), space_after=3)
-        s_footer   = ps("Footer",   7, MID_GREY,  align=TA_CENTER, space_after=0)
-        s_kpi_val  = ps("KPIVal",  18, DARK_BG,   bold=True,  align=TA_CENTER, space_after=0)
-        s_kpi_lbl  = ps("KPILbl",   8, MID_GREY,  align=TA_CENTER, space_after=0)
-    
+                alignment=align, spaceBefore=space_before, spaceAfter=space_after,
+                leading=size*1.35)
+
+        s_title  = ps("VFTitle", 22, DARK_BG, bold=True,  align=TA_LEFT, space_after=2)
+        s_sub    = ps("VFSub",   10, MID_GREY, align=TA_LEFT, space_after=14)
+        s_section= ps("VFSect",  12, DARK_BG, bold=True,  align=TA_LEFT, space_before=10, space_after=5)
+        s_body   = ps("VFBody",   9, colors.HexColor("#2c2c2c"), space_after=6)
+        s_note   = ps("VFNote",   8, MID_GREY, space_after=3)
+        s_warn   = ps("VFWarn",   8, RED_COL, bold=True, space_after=4)
+        s_footer = ps("VFFooter", 7, MID_GREY, align=TA_CENTER, space_after=0)
+        s_kpi_val= ps("VFKPIv", 18, DARK_BG, bold=True, align=TA_CENTER, space_after=0)
+        s_kpi_lbl= ps("VFKPIl",  8, MID_GREY, align=TA_CENTER, space_after=0)
         report_date = date.today().strftime("%d %B %Y")
-    
-        # ── Table style helper ────────────────────────────────────────────────────
-        def styled_table(data, col_widths, row_colors=True):
+
+        def styled_tbl(data, col_widths, highlight_rows=None, highlight_color=None):
             t = Table(data, colWidths=col_widths, repeatRows=1)
             ts = [
-                ("FONTNAME",     (0, 0), (-1, 0),  "Helvetica-Bold"),
-                ("FONTSIZE",     (0, 0), (-1, 0),  8),
-                ("BACKGROUND",   (0, 0), (-1, 0),  DARK_BG),
-                ("TEXTCOLOR",    (0, 0), (-1, 0),  GREEN),
-                ("FONTNAME",     (0, 1), (-1, -1), "Helvetica"),
-                ("FONTSIZE",     (0, 1), (-1, -1), 8),
-                ("TEXTCOLOR",    (0, 1), (-1, -1), colors.HexColor("#1a1a2e")),
-                ("GRID",         (0, 0), (-1, -1), 0.3, colors.HexColor("#dddddd")),
-                ("TOPPADDING",   (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING",(0, 0), (-1, -1), 4),
-                ("LEFTPADDING",  (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+                ("FONTNAME",     (0,0),(-1,0),  "Helvetica-Bold"),
+                ("FONTSIZE",     (0,0),(-1,0),  8),
+                ("BACKGROUND",   (0,0),(-1,0),  DARK_BG),
+                ("TEXTCOLOR",    (0,0),(-1,0),  GREEN),
+                ("FONTNAME",     (0,1),(-1,-1), "Helvetica"),
+                ("FONTSIZE",     (0,1),(-1,-1), 8),
+                ("TEXTCOLOR",    (0,1),(-1,-1), DARK_BG),
+                ("GRID",         (0,0),(-1,-1), 0.3, colors.HexColor("#dddddd")),
+                ("TOPPADDING",   (0,0),(-1,-1), 4),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 4),
+                ("LEFTPADDING",  (0,0),(-1,-1), 6),
+                ("RIGHTPADDING", (0,0),(-1,-1), 6),
+                ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
             ]
-            if row_colors:
-                for i in range(1, len(data)):
-                    bg = LIGHT_ROW if i % 2 == 1 else colors.white
-                    ts.append(("BACKGROUND", (0, i), (-1, i), bg))
+            for i in range(1, len(data)):
+                ts.append(("BACKGROUND",(0,i),(-1,i), LIGHT_ROW if i%2==1 else colors.white))
+            if highlight_rows and highlight_color:
+                for hr in highlight_rows:
+                    if 0 <= hr < len(data):
+                        ts.append(("BACKGROUND",(0,hr),(-1,hr), highlight_color))
+                        ts.append(("FONTNAME",(0,hr),(-1,hr),"Helvetica-Bold"))
             t.setStyle(TableStyle(ts))
             return t
-    
-        # ── Chart → PNG bytes helper ──────────────────────────────────────────────
-        def chart_png(fig, width_px=900, height_px=380):
-            fig.update_layout(
-                plot_bgcolor="#ffffff",
-                paper_bgcolor="#ffffff",
-                font_color="#161a16",
-                margin=dict(l=40, r=40, t=40, b=40),
-            )
-            img_bytes = pio.to_image(fig, format="png", width=width_px, height=height_px, scale=2)
-            return io.BytesIO(img_bytes)
-    
-        def chart_flowable(fig, width_cm, height_cm, width_px=900, height_px=380):
+
+        def chart_png_vf(fig, width_px=900, height_px=380):
+            fig.update_layout(plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
+                              font_color="#161a16", margin=dict(l=40,r=40,t=40,b=40))
+            return io.BytesIO(pio.to_image(fig, format="png", width=width_px, height=height_px, scale=2))
+
+        def chart_flow(fig, w_cm, h_cm, w_px=900, h_px=380):
             from reportlab.platypus import Image as RLImage
-            buf = chart_png(fig, width_px, height_px)
-            return RLImage(buf, width=width_cm*cm, height=height_cm*cm)
-    
-        # ── Build charts ──────────────────────────────────────────────────────────
-    
+            return RLImage(chart_png_vf(fig, w_px, h_px), width=w_cm*cm, height=h_cm*cm)
+
+        def sec_rule(): return HRFlowable(width="100%",thickness=0.5,color=colors.HexColor("#dddddd"),spaceAfter=6)
+        def grn_rule(): return HRFlowable(width="100%",thickness=2,color=GREEN,spaceAfter=10)
+        def kpi_cell(v, lbl): return [Paragraph(v, s_kpi_val), Paragraph(lbl, s_kpi_lbl)]
+        def footer_para(): return Paragraph(
+            f"Agricultural Intelligence Portal &nbsp;·&nbsp; CEA Feasibility Report &nbsp;·&nbsp; "
+            f"For indicative purposes only. Not investment advice. &nbsp;·&nbsp; {report_date}", s_footer)
+
+        # ── Pre-compute scalars ────────────────────────────────────────────────
+        _rev   = r["annual_revenue"]
+        _ebitda= r["ebitda"]
+        _capex = r["total_capex"]
+        _costs = r["total_annual_costs"]
+        _kg    = r["total_annual_kg"]
+        _price = r["effective_price"]
+        _energy_pct = r["annual_energy_cost"] / _rev * 100 if _rev > 0 else 0
+        _loss_r = inputs.get("loss_rate", 5) / 100
+        _denom  = _price * (1-_loss_r) * r["cycles_per_year"] * r["effective_grow_area"]
+        _be_yield  = _costs / _denom if _denom > 0 else None
+        _be_price  = _costs / _kg if _kg > 0 else None
+        _price_hdroom = ((_price - _be_price) / _price * 100) if _be_price and _price > 0 else None
+        _equity= _capex * (1 - inputs.get("ltv", 0)/100)
+        _debt  = _capex * inputs.get("ltv", 0)/100
+        _ds    = r.get("annual_debt_service", 0)
+        _dscr  = _ebitda / _ds if _ds > 0 else None
+        viab_label = "VIABLE" if _energy_pct < 40 else ("MARGINAL" if _energy_pct < 70 else "NOT VIABLE")
+        viab_color = colors.HexColor("#00c87a") if _energy_pct < 40 else (AMBER if _energy_pct < 70 else RED_COL)
+        payback_str = f"{r['payback_years']:.1f} yrs" if r.get("payback_years") else "N/A"
+        dscr_str    = f"{_dscr:.2f}x" if _dscr else "N/A"
+
+        # ── Sensitivity runs for tornado + scenarios ───────────────────────────
+        def _vf_run(kwh_m=1.0, lab_m=1.0, yld_m=1.0, prc_m=1.0):
+            return run_with_multipliers(inputs, kwh_mult=kwh_m, labour_mult=lab_m,
+                                        yield_mult=yld_m, price_mult=prc_m)
+
+        _tvars = [
+            {"label":"Selling Price",  "pess":_vf_run(prc_m=0.80)["ebitda"], "opt":_vf_run(prc_m=1.20)["ebitda"],
+             "pess_label":"Price −20%","opt_label":"Price +20%"},
+            {"label":"Energy Price",   "pess":_vf_run(kwh_m=1.50)["ebitda"], "opt":_vf_run(kwh_m=0.70)["ebitda"],
+             "pess_label":"Energy +50%","opt_label":"Energy −30%"},
+            {"label":"Yield",          "pess":_vf_run(yld_m=0.80)["ebitda"], "opt":_vf_run(yld_m=1.20)["ebitda"],
+             "pess_label":"Yield −20%","opt_label":"Yield +20%"},
+            {"label":"Labour Cost",    "pess":_vf_run(lab_m=1.30)["ebitda"], "opt":_vf_run(lab_m=0.80)["ebitda"],
+             "pess_label":"Labour +30%","opt_label":"Labour −20%"},
+        ]
+        for _tv in _tvars:
+            _tv["delta_pess"] = _tv["pess"] - _ebitda
+            _tv["delta_opt"]  = _tv["opt"]  - _ebitda
+            _tv["swing"]      = abs(_tv["delta_opt"] - _tv["delta_pess"])
+        _tvars.sort(key=lambda x: x["swing"], reverse=True)
+
+        _s_pess = _vf_run(prc_m=0.80)
+        _s_opt  = _vf_run(prc_m=1.20)
+        _scen_names  = ["Low Price (−20%)", "Base Case", "High Price (+20%)"]
+        _scen_ebitda = [_s_pess["ebitda"], _ebitda, _s_opt["ebitda"]]
+        _scen_margin = [_s_pess["ebitda_margin"]*100, r["ebitda_margin"]*100, _s_opt["ebitda_margin"]*100]
+        _scen_rev    = [_s_pess["annual_revenue"], _rev, _s_opt["annual_revenue"]]
+        _scen_colors = ["#ff6b6b" if e < 0 else ("#ffc13d" if e < _rev*0.10 else "#00c87a") for e in _scen_ebitda]
+
+        # ── Charts ─────────────────────────────────────────────────────────────
         # EBITDA bridge
-        bridge_labels = ["Revenue", "Variable", "Water", "Energy", "Labour", "Rent", "Maint.", "EBITDA"]
-        bridge_values = [
-            r["annual_revenue"], -r["annual_variable_cost"], -r["annual_water_cost"],
-            -r["annual_energy_cost"], -r["annual_labour_cost"], -r["annual_rent"],
-            -r["annual_maintenance"], r["ebitda"],
-        ]
-        bridge_colors = []
-        for i, v in enumerate(bridge_values):
-            if i == 0:                          bridge_colors.append("#00c87a")
-            elif i == len(bridge_values) - 1:   bridge_colors.append("#00c87a" if v >= 0 else "#ff4d4d")
-            else:                               bridge_colors.append("#ff6b6b")
-    
-        fig_bridge = go.Figure(go.Bar(
-            x=bridge_labels, y=bridge_values,
-            marker_color=bridge_colors,
-            text=[f"${abs(v)/1e3:.0f}K" for v in bridge_values],
-            textposition="outside",
-        ))
-        fig_bridge.update_layout(
-            title="EBITDA Bridge ($)", showlegend=False,
-            yaxis=dict(showgrid=True, gridcolor="#eeeeee", zeroline=True, zerolinecolor="#cccccc"),
-            xaxis=dict(showgrid=False),
-        )
-    
+        _bl = ["Revenue","Variable","Water","Energy","Labour","Rent","Maint.","EBITDA"]
+        _bv = [_rev, -r["annual_variable_cost"], -r["annual_water_cost"],
+               -r["annual_energy_cost"], -r["annual_labour_cost"],
+               -r["annual_rent"], -r["annual_maintenance"], _ebitda]
+        _bc = ["#00c87a" if i==0 or (i==len(_bv)-1 and v>=0) else "#ff6b6b" for i,v in enumerate(_bv)]
+        fig_bridge = go.Figure(go.Bar(x=_bl, y=_bv, marker_color=_bc,
+            text=[f"${abs(v)/1e3:.0f}K" for v in _bv], textposition="outside"))
+        fig_bridge.update_layout(title="EBITDA Bridge ($)", showlegend=False,
+            yaxis=dict(showgrid=True, gridcolor="#eeeeee"),
+            xaxis=dict(showgrid=False))
+
         # Cost donut
-        cost_labels = ["Energy", "Labour", "Variable", "Water", "Maintenance", "Rent"]
-        cost_values = [
-            r["annual_energy_cost"], r["annual_labour_cost"], r["annual_variable_cost"],
-            r["annual_water_cost"], r["annual_maintenance"], r["annual_rent"],
-        ]
         fig_cost = go.Figure(go.Pie(
-            labels=cost_labels, values=cost_values, hole=0.48,
-            marker_colors=["#ff4d4d","#ffc13d","#00c87a","#4fc3f7","#ba68c8","#ef9a9a"],
-            textinfo="percent+label", textfont_size=9,
-        ))
+            labels=["Energy","Labour","Variable","Water","Maintenance","Rent"],
+            values=[r["annual_energy_cost"],r["annual_labour_cost"],r["annual_variable_cost"],
+                    r["annual_water_cost"],r["annual_maintenance"],r["annual_rent"]],
+            hole=0.48, marker_colors=["#ff4d4d","#ffc13d","#00c87a","#4fc3f7","#ba68c8","#ef9a9a"],
+            textinfo="percent+label", textfont_size=8))
         fig_cost.update_layout(title="Cost Mix", showlegend=False)
-    
+
         # CAPEX donut
-        capex_labels = ["LED","HVAC","Racks","Building","Automation","Robotics","Electrical","Water","Install"]
-        capex_values = [
-            r["led_capex"], r["hvac_capex"], r["racks_capex"], r["building_capex"],
-            r["automation_capex"], r["robotics_capex"], r["electrical_capex"],
-            r["water_capex"], r["installation_capex"],
-        ]
         fig_capex = go.Figure(go.Pie(
-            labels=capex_labels, values=capex_values, hole=0.48,
-            marker_colors=["#00e5a0","#26c6da","#66bb6a","#ffa726","#ab47bc","#ef5350","#42a5f5","#26a69a","#8d6e63"],
-            textinfo="percent+label", textfont_size=9,
-        ))
+            labels=["LED","HVAC","Racks","Building","Automation","Robotics","Electrical","Water","Install"],
+            values=[r["led_capex"],r["hvac_capex"],r["racks_capex"],r["building_capex"],
+                    r["automation_capex"],r["robotics_capex"],r["electrical_capex"],
+                    r["water_capex"],r["installation_capex"]],
+            hole=0.48, marker_colors=["#00e5a0","#26c6da","#66bb6a","#ffa726","#ab47bc","#ef5350","#42a5f5","#26a69a","#8d6e63"],
+            textinfo="percent+label", textfont_size=8))
         fig_capex.update_layout(title="CAPEX Mix", showlegend=False)
-    
-        # DCF cumulative NPV line
-        dcf_years = [d["year"] for d in r["dcf_cashflows"]]
-        dcf_cumul = [d["cumulative_npv"] for d in r["dcf_cashflows"]]
-        dcf_colors = ["#00c87a" if v >= 0 else "#ff4d4d" for v in dcf_cumul]
+
+        # DCF
+        _dcf = r.get("dcf_cashflows", [])
+        _dcf_cumul = [d["cumulative_npv"] for d in _dcf]
         fig_dcf = go.Figure()
         fig_dcf.add_trace(go.Scatter(
-            x=dcf_years, y=dcf_cumul,
-            mode="lines+markers",
-            line=dict(color="#00c87a", width=2.5),
-            marker=dict(color=dcf_colors, size=7),
-            fill="tozeroy", fillcolor="rgba(0,200,122,0.08)",
-            name="Cumulative NPV",
-        ))
-        fig_dcf.add_hline(y=0, line_dash="dash", line_color="#cccccc", line_width=1)
-        fig_dcf.update_layout(
-            title="Cumulative NPV — 10-Year DCF ($)",
+            x=[d["year"] for d in _dcf], y=_dcf_cumul,
+            mode="lines+markers", line=dict(color="#00c87a", width=2.5),
+            marker=dict(color=["#00c87a" if v>=0 else "#ff4d4d" for v in _dcf_cumul], size=7),
+            fill="tozeroy", fillcolor="rgba(0,200,122,0.08)"))
+        fig_dcf.add_hline(y=0, line_dash="dash", line_color="#cccccc")
+        fig_dcf.update_layout(title="Cumulative NPV — 10-Year DCF ($)",
             xaxis=dict(title="Year", showgrid=False, dtick=1),
-            yaxis=dict(title="$", showgrid=True, gridcolor="#eeeeee", zeroline=False),
-            showlegend=False,
-        )
-    
-        # ── Compute viability signal ───────────────────────────────────────────────
-        energy_pct = r["annual_energy_cost"] / r["annual_revenue"] * 100 if r["annual_revenue"] > 0 else 0
-        if energy_pct < 40:
-            viability_label = "VIABLE"
-            viability_color = colors.HexColor("#00c87a")
-        elif energy_pct < 70:
-            viability_label = "MARGINAL"
-            viability_color = AMBER
-        else:
-            viability_label = "NOT VIABLE"
-            viability_color = RED_COL
-    
-        _loss_r = inputs.get("loss_rate", 5) / 100
-        _denom  = r["effective_price"] * (1 - _loss_r) * r["cycles_per_year"] * r["effective_grow_area"]
-        be_yield = r["total_annual_costs"] / _denom if _denom > 0 else None
-    
-        # ─────────────────────────────────────────────────────────────────────────
-        # BUILD STORY
-        # ─────────────────────────────────────────────────────────────────────────
+            yaxis=dict(title="$", showgrid=True, gridcolor="#eeeeee"))
+
+        # Tornado
+        fig_torn = go.Figure()
+        for _tv in _tvars:
+            fig_torn.add_trace(go.Bar(name="Pessimistic", y=[_tv["label"]], x=[_tv["delta_pess"]],
+                orientation="h", marker_color="rgba(255,77,77,0.75)",
+                showlegend=(_tv==_tvars[0]), text=f"${_tv['delta_pess']:,.0f}", textposition="outside"))
+            fig_torn.add_trace(go.Bar(name="Optimistic", y=[_tv["label"]], x=[_tv["delta_opt"]],
+                orientation="h", marker_color="rgba(0,229,160,0.75)",
+                showlegend=(_tv==_tvars[0]), text=f"${_tv['delta_opt']:,.0f}", textposition="outside"))
+        fig_torn.add_vline(x=0, line_dash="dash", line_color="#888888")
+        fig_torn.update_layout(barmode="overlay", height=280, margin=dict(l=10,r=80,t=30,b=20),
+            title="EBITDA Sensitivity — Key Drivers",
+            xaxis=dict(title="EBITDA delta ($)", showgrid=False),
+            yaxis=dict(showgrid=False),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+
+        # Scenario comparison
+        fig_scen = go.Figure()
+        fig_scen.add_trace(go.Bar(name="Revenue", x=_scen_names, y=_scen_rev,
+            marker_color=["rgba(0,200,122,0.3)"]*3,
+            text=[f"${v/1e3:.0f}K" for v in _scen_rev], textposition="outside"))
+        fig_scen.add_trace(go.Bar(name="EBITDA", x=_scen_names, y=_scen_ebitda,
+            marker_color=_scen_colors,
+            text=[f"${v/1e3:.0f}K" for v in _scen_ebitda], textposition="outside"))
+        fig_scen.update_layout(barmode="group", title="Price Scenario Comparison",
+            height=280, margin=dict(l=10,r=20,t=40,b=20),
+            yaxis=dict(showgrid=True, gridcolor="#eeeeee"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+
+        # ── STORY ──────────────────────────────────────────────────────────────
         story = []
-    
-        def section_rule():
-            return HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#dddddd"), spaceAfter=6)
-    
-        def green_rule():
-            return HRFlowable(width="100%", thickness=2, color=GREEN, spaceAfter=10)
-    
-        # ══════════════════════════════════════════════════════════════════════════
-        # PAGE 1 — Cover + KPIs + EBITDA bridge
-        # ══════════════════════════════════════════════════════════════════════════
-    
-        # Header band
-        story.append(Paragraph("CEA Feasibility Summary", s_title))
+
+        # ═══════════════════════════════════════════════
+        # PAGE 1 — Executive Summary + KPIs + Bridge
+        # ═══════════════════════════════════════════════
+        story.append(Paragraph("CEA Feasibility Report — Vertical Farm", s_title))
         story.append(Paragraph(
             f"{inputs['crop']} &nbsp;·&nbsp; {inputs['country']} &nbsp;·&nbsp; "
             f"{int(inputs['footprint']):,} m² &nbsp;·&nbsp; {int(inputs['levels'])} levels &nbsp;·&nbsp; "
-            f"{inputs['automation']} automation &nbsp;·&nbsp; {report_date}",
-            s_subtitle,
-        ))
-        story.append(green_rule())
-    
-        # Viability signal banner
-        viability_style = ps("Viab", 10, viability_color, bold=True, align=TA_CENTER, space_after=10)
+            f"{inputs['automation']} automation &nbsp;·&nbsp; {report_date}", s_sub))
+        story.append(grn_rule())
+
+        viab_style = ParagraphStyle("VFViab", fontSize=10, textColor=viab_color,
+            fontName="Helvetica-Bold", alignment=TA_CENTER,
+            backColor=colors.HexColor("#f0faf5") if _energy_pct<40 else colors.HexColor("#fff8e1"),
+            spaceAfter=10, borderPadding=6)
         story.append(Paragraph(
-            f"Structural Viability Signal: {viability_label} &nbsp;|&nbsp; "
-            f"Energy = {energy_pct:.1f}% of Revenue &nbsp;|&nbsp; "
-            f"Break-even yield = {be_yield:.2f} kg/m²/cycle" if be_yield else
-            f"Structural Viability Signal: {viability_label} &nbsp;|&nbsp; Energy = {energy_pct:.1f}% of Revenue",
-            viability_style,
-        ))
-    
-        # KPI tiles (2-row table, 4 cols each)
-        def kpi_cell(value, label):
-            return [Paragraph(value, s_kpi_val), Paragraph(label, s_kpi_lbl)]
-    
-        payback_str = f"{r['payback_years']:.1f} yrs" if r["payback_years"] else "N/A"
-        dscr_str    = f"{r['dscr']:.2f}x" if r["dscr"] else "N/A"
-    
-        kpi_data = [
-            [kpi_cell(f"${r['annual_revenue']/1e3:.0f}K",          "Annual Revenue"),
-             kpi_cell(f"${r['ebitda']/1e3:.0f}K",                  "EBITDA"),
-             kpi_cell(f"{r['ebitda_margin']*100:.1f}%",            "EBITDA Margin"),
-             kpi_cell(f"${r['total_capex']/1e3:.0f}K",             "Total CAPEX")],
-            [kpi_cell(payback_str,                                  "Payback Period"),
-             kpi_cell(dscr_str,                                     "DSCR"),
-             kpi_cell(f"{energy_pct:.1f}%",                        "Energy % Revenue"),
-             kpi_cell(f"${r['npv']/1e3:.0f}K",                     "NPV (10yr)")],
-        ]
-    
-        kpi_col_w = W / 4
-        kpi_table = Table(kpi_data, colWidths=[kpi_col_w]*4)
-        kpi_style = [
-            ("BOX",          (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
-            ("INNERGRID",    (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
-            ("BACKGROUND",   (0, 0), (-1, -1), LIGHT_ROW),
-            ("TOPPADDING",   (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING",(0, 0), (-1, -1), 10),
-            ("ALIGN",        (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
-        ]
-        kpi_table.setStyle(TableStyle(kpi_style))
-        story.append(kpi_table)
-        story.append(Spacer(1, 0.4*cm))
-    
-        # EBITDA Bridge chart — full width
-        story.append(Paragraph("EBITDA Bridge", s_section))
-        story.append(section_rule())
-        story.append(chart_flowable(fig_bridge, width_cm=17, height_cm=7, width_px=1000, height_px=420))
-    
-        # ══════════════════════════════════════════════════════════════════════════
-        # PAGE 2 — Cost mix + CAPEX mix + farm parameters table
-        # ══════════════════════════════════════════════════════════════════════════
-        story.append(PageBreak())
-    
-        story.append(Paragraph("Cost & Capital Structure", s_title))
-        story.append(green_rule())
-    
-        # Two donuts side by side
-        donut_col_w = W / 2 - 0.2*cm
-        donut_table = Table(
-            [[chart_flowable(fig_cost,  width_cm=8.2, height_cm=6.5, width_px=500, height_px=420),
-              chart_flowable(fig_capex, width_cm=8.2, height_cm=6.5, width_px=500, height_px=420)]],
-            colWidths=[donut_col_w, donut_col_w],
-        )
-        donut_table.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "TOP")]))
-        story.append(donut_table)
+            f"&#9679; Structural Viability: <b>{viab_label}</b> &nbsp;|&nbsp; "
+            f"Energy = {_energy_pct:.1f}% of Revenue &nbsp;|&nbsp; Modality: Vertical Farm", viab_style))
+
+        # Executive summary narrative
+        story.append(Paragraph("Executive Summary", s_section))
+        story.append(sec_rule())
+        _viab_txt = ("The farm achieves a positive EBITDA" if _ebitda > 0
+                     else "The farm currently produces a negative EBITDA")
+        _energy_txt = (f"Energy costs represent {_energy_pct:.1f}% of revenue — "
+                       + ("within the viable threshold for indoor CEA." if _energy_pct < 40
+                          else "above the 40% structural threshold, indicating energy-driven non-viability."))
+        _be_txt = (f"Break-even requires a minimum selling price of ${_be_price:.2f}/kg"
+                   + (f" — {abs(_price_hdroom):.0f}% {'below' if _price_hdroom < 0 else 'above'} current realisation of ${_price:.2f}/kg."
+                      if _price_hdroom is not None else "."))
+        _dscr_txt = ""
+        if _dscr and _dscr < 1.0:
+            _dscr_txt = (f" The DSCR of {_dscr:.2f}x indicates EBITDA is insufficient to cover debt service "
+                         f"at {inputs.get('ltv',0)}% LTV — consider equity financing or reduced leverage.")
+        elif _dscr and _dscr >= 1.25:
+            _dscr_txt = f" The DSCR of {_dscr:.2f}x meets standard lender coverage thresholds (1.25x minimum)."
+        story.append(Paragraph(
+            f"{_viab_txt} of ${_ebitda:,.0f}/yr ({r['ebitda_margin']*100:.1f}% margin) on "
+            f"{int(inputs['footprint']):,} m² ({int(inputs['levels'])} levels) of {inputs['crop']}. "
+            f"{_energy_txt} {_be_txt}{_dscr_txt}", s_body))
+
+        if _dscr and _dscr < 1.0:
+            story.append(Paragraph(
+                f"⚠ DSCR Alert: debt service coverage ({_dscr:.2f}x) is below 1.0x. "
+                f"This project cannot service its debt at current EBITDA levels.", s_warn))
+
         story.append(Spacer(1, 0.3*cm))
-    
-        # Annual cost breakdown table
-        story.append(Paragraph("Annual Cost Breakdown", s_section))
-        story.append(section_rule())
-        total_costs = r["total_annual_costs"]
-        rev = r["annual_revenue"]
-        cost_data = [
-            ["Cost Item", "Annual ($)", "% of Total Costs", "% of Revenue"],
-            ["Energy",      f"${r['annual_energy_cost']:,.0f}", f"{r['annual_energy_cost']/total_costs*100:.1f}%", f"{r['annual_energy_cost']/rev*100:.1f}%"],
-            ["Labour",      f"${r['annual_labour_cost']:,.0f}", f"{r['annual_labour_cost']/total_costs*100:.1f}%", f"{r['annual_labour_cost']/rev*100:.1f}%"],
-            ["Variable",    f"${r['annual_variable_cost']:,.0f}", f"{r['annual_variable_cost']/total_costs*100:.1f}%", f"{r['annual_variable_cost']/rev*100:.1f}%"],
-            ["Water",       f"${r['annual_water_cost']:,.0f}", f"{r['annual_water_cost']/total_costs*100:.1f}%", f"{r['annual_water_cost']/rev*100:.1f}%"],
-            ["Maintenance", f"${r['annual_maintenance']:,.0f}", f"{r['annual_maintenance']/total_costs*100:.1f}%", f"{r['annual_maintenance']/rev*100:.1f}%"],
-            ["Rent",        f"${r['annual_rent']:,.0f}", f"{r['annual_rent']/total_costs*100:.1f}%", f"{r['annual_rent']/rev*100:.1f}%"],
-            ["TOTAL",       f"${total_costs:,.0f}", "100%", f"{total_costs/rev*100:.1f}%"],
+
+        # KPI grid
+        kpi_data = [
+            [kpi_cell(f"${_rev/1e3:.0f}K","Annual Revenue"),
+             kpi_cell(f"${_ebitda/1e3:.0f}K","EBITDA"),
+             kpi_cell(f"{r['ebitda_margin']*100:.1f}%","EBITDA Margin"),
+             kpi_cell(f"${_capex/1e3:.0f}K","Total CAPEX")],
+            [kpi_cell(payback_str,"Payback Period"),
+             kpi_cell(dscr_str,"DSCR"),
+             kpi_cell(f"{_energy_pct:.1f}%","Energy % Revenue"),
+             kpi_cell(f"${r.get('npv',0)/1e3:.0f}K","NPV (10yr)")],
         ]
-        story.append(styled_table(cost_data, [W*0.32, W*0.23, W*0.23, W*0.22]))
+        kpi_t = Table(kpi_data, colWidths=[W/4]*4)
+        kpi_t.setStyle(TableStyle([
+            ("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#dddddd")),
+            ("INNERGRID",(0,0),(-1,-1),0.5,colors.HexColor("#dddddd")),
+            ("BACKGROUND",(0,0),(-1,-1),LIGHT_ROW),
+            ("TOPPADDING",(0,0),(-1,-1),10),("BOTTOMPADDING",(0,0),(-1,-1),10),
+            ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ]))
+        story.append(kpi_t)
         story.append(Spacer(1, 0.4*cm))
-    
-        # CAPEX breakdown table
-        story.append(Paragraph("CAPEX Breakdown", s_section))
-        story.append(section_rule())
-        capex_data = [
-            ["Component", "Amount ($)", "% of Total CAPEX"],
-            ["LED Lighting",       f"${r['led_capex']:,.0f}",          f"{r['led_capex']/r['total_capex']*100:.1f}%"],
-            ["HVAC",               f"${r['hvac_capex']:,.0f}",         f"{r['hvac_capex']/r['total_capex']*100:.1f}%"],
-            ["Racking",            f"${r['racks_capex']:,.0f}",        f"{r['racks_capex']/r['total_capex']*100:.1f}%"],
-            ["Building & Enclosure",f"${r['building_capex']:,.0f}",   f"{r['building_capex']/r['total_capex']*100:.1f}%"],
-            ["Automation Controls",f"${r['automation_capex']:,.0f}",  f"{r['automation_capex']/r['total_capex']*100:.1f}%"],
-            ["Robotics",           f"${r['robotics_capex']:,.0f}",    f"{r['robotics_capex']/r['total_capex']*100:.1f}%"],
-            ["Electrical",         f"${r['electrical_capex']:,.0f}",  f"{r['electrical_capex']/r['total_capex']*100:.1f}%"],
-            ["Water/Irrigation",   f"${r['water_capex']:,.0f}",       f"{r['water_capex']/r['total_capex']*100:.1f}%"],
-            ["Installation",       f"${r['installation_capex']:,.0f}",f"{r['installation_capex']/r['total_capex']*100:.1f}%"],
-            ["TOTAL",              f"${r['total_capex']:,.0f}",        "100%"],
-        ]
-        story.append(styled_table(capex_data, [W*0.50, W*0.27, W*0.23]))
-    
-        # ══════════════════════════════════════════════════════════════════════════
-        # PAGE 3 — DCF + farm parameters
-        # ══════════════════════════════════════════════════════════════════════════
+        story.append(Paragraph("EBITDA Bridge", s_section))
+        story.append(sec_rule())
+        story.append(chart_flow(fig_bridge, 17, 7, 1000, 420))
+
+        # ═══════════════════════════════════════════════
+        # PAGE 2 — Cost + CAPEX + P&L
+        # ═══════════════════════════════════════════════
         story.append(PageBreak())
-    
-        story.append(Paragraph("Investment Returns & Farm Configuration", s_title))
-        story.append(green_rule())
-    
-        # DCF chart — full width
-        story.append(Paragraph("10-Year Cumulative NPV", s_section))
-        story.append(section_rule())
-        story.append(chart_flowable(fig_dcf, width_cm=17, height_cm=7, width_px=1000, height_px=420))
-        story.append(Spacer(1, 0.4*cm))
-    
-        # DCF table
-        story.append(Paragraph("DCF Cash Flow Detail", s_section))
-        story.append(section_rule())
-        dcf_data = [["Year", "FCFE ($)", "PV ($)", "Cumulative NPV ($)"]]
-        for d in r["dcf_cashflows"]:
-            dcf_data.append([
-                str(d["year"]),
-                f"${d['fcfe']:,.0f}",
-                f"${d['pv']:,.0f}",
-                f"${d['cumulative_npv']:,.0f}",
-            ])
-        story.append(styled_table(dcf_data, [W*0.10, W*0.28, W*0.28, W*0.34]))
-        story.append(Spacer(1, 0.5*cm))
-    
-        # Farm parameters table
-        story.append(Paragraph("Farm Configuration", s_section))
-        story.append(section_rule())
-        params_data = [
-            ["Parameter", "Value", "Parameter", "Value"],
-            ["Country",          inputs["country"],                    "Crop",             inputs["crop"]],
-            ["Footprint",        f"{int(inputs['footprint']):,} m²",  "Levels",           str(int(inputs["levels"]))],
-            ["Lights",           inputs["lights_tier"],               "HVAC",             inputs["hvac"]],
-            ["Automation",       inputs["automation"],                 "Harvest Mode",     inputs["harvest_mode"]],
-            ["Price Scenario",   inputs["price_scenario"],            "Selling Price",     f"${r['effective_price']:.2f}/kg"],
-            ["Cycles/Year",      str(r["cycles_per_year"]),           "Annual Output",    f"{r['total_annual_kg']:,.0f} kg"],
-            ["Loss Rate",        f"{inputs['loss_rate']}%",           "Net Grow Factor",  f"{inputs['net_grow_factor']}%"],
-            ["LTV",              f"{inputs['ltv']}%",                 "Interest Rate",    f"{inputs['interest_rate']}%"],
-            ["Depreciation",     f"{inputs['depreciation_years']} yrs","Tax Rate",        f"{inputs['tax_rate']}%"],
-            ["Loan Term",        f"{inputs['loan_term_years']} yrs",  "Water Price",      f"${inputs['water_price']}/m³"],
+        story.append(Paragraph("Cost Structure & Capital Requirements", s_title))
+        story.append(grn_rule())
+        donut_w = W/2 - 0.2*cm
+        donut_t = Table([[chart_flow(fig_cost,8.2,6.5,500,420), chart_flow(fig_capex,8.2,6.5,500,420)]],
+                        colWidths=[donut_w, donut_w])
+        donut_t.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP")]))
+        story.append(donut_t)
+        story.append(Spacer(1,0.3*cm))
+
+        # Annual P&L table
+        story.append(Paragraph("Annual P&L", s_section))
+        story.append(sec_rule())
+        pl_data = [["Item","$/year","% of Costs","% of Revenue"],
+            ["Revenue",     f"${_rev:,.0f}",   "—",   "100%"],
+            ["Energy",      f"${r['annual_energy_cost']:,.0f}",
+             f"{r['annual_energy_cost']/_costs*100:.1f}%" if _costs>0 else "—",
+             f"{r['annual_energy_cost']/_rev*100:.1f}%" if _rev>0 else "—"],
+            ["Labour",      f"${r['annual_labour_cost']:,.0f}",
+             f"{r['annual_labour_cost']/_costs*100:.1f}%" if _costs>0 else "—",
+             f"{r['annual_labour_cost']/_rev*100:.1f}%" if _rev>0 else "—"],
+            ["Variable",    f"${r['annual_variable_cost']:,.0f}",
+             f"{r['annual_variable_cost']/_costs*100:.1f}%" if _costs>0 else "—", "—"],
+            ["Water",       f"${r['annual_water_cost']:,.0f}",
+             f"{r['annual_water_cost']/_costs*100:.1f}%" if _costs>0 else "—", "—"],
+            ["Maintenance", f"${r['annual_maintenance']:,.0f}",
+             f"{r['annual_maintenance']/_costs*100:.1f}%" if _costs>0 else "—", "—"],
+            ["Rent",        f"${r['annual_rent']:,.0f}",
+             f"{r['annual_rent']/_costs*100:.1f}%" if _costs>0 else "—", "—"],
+            ["Total Costs", f"${_costs:,.0f}", "100%", f"{_costs/_rev*100:.1f}%" if _rev>0 else "—"],
+            ["EBITDA",      f"${_ebitda:,.0f}", "—", f"{r['ebitda_margin']*100:.1f}%"],
         ]
-        col_w = W / 4
-        story.append(styled_table(params_data, [col_w]*4))
-    
-        # ── Footer on last page ───────────────────────────────────────────────────
-        story.append(Spacer(1, 0.8*cm))
-        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cccccc"), spaceAfter=4))
+        story.append(styled_tbl(pl_data, [W*0.34,W*0.22,W*0.22,W*0.22],
+            highlight_rows=[len(pl_data)-1],
+            highlight_color=colors.HexColor("#e8f5e9") if _ebitda>=0 else colors.HexColor("#ffebee")))
+        story.append(Spacer(1,0.3*cm))
+
+        # CAPEX breakdown
+        story.append(Paragraph("CAPEX Breakdown & Funding Structure", s_section))
+        story.append(sec_rule())
+        capex_plant = [["Component","$","% of Total"],
+            ["LED Lighting",        f"${r['led_capex']:,.0f}",          f"{r['led_capex']/_capex*100:.1f}%"],
+            ["HVAC",                f"${r['hvac_capex']:,.0f}",         f"{r['hvac_capex']/_capex*100:.1f}%"],
+            ["Racking",             f"${r['racks_capex']:,.0f}",        f"{r['racks_capex']/_capex*100:.1f}%"],
+            ["Building & Enclosure",f"${r['building_capex']:,.0f}",     f"{r['building_capex']/_capex*100:.1f}%"],
+            ["Automation Controls", f"${r['automation_capex']:,.0f}",   f"{r['automation_capex']/_capex*100:.1f}%"],
+            ["Robotics",            f"${r['robotics_capex']:,.0f}",     f"{r['robotics_capex']/_capex*100:.1f}%"],
+            ["Electrical",          f"${r['electrical_capex']:,.0f}",   f"{r['electrical_capex']/_capex*100:.1f}%"],
+            ["Water/Irrigation",    f"${r['water_capex']:,.0f}",        f"{r['water_capex']/_capex*100:.1f}%"],
+            ["Installation",        f"${r['installation_capex']:,.0f}", f"{r['installation_capex']/_capex*100:.1f}%"],
+            ["TOTAL",               f"${_capex:,.0f}",                  "100%"],
+        ]
+        capex_fund = [["Funding Structure","$",""],
+            ["Equity (own funds)",  f"${_equity:,.0f}", f"{(1-inputs.get('ltv',0)/100)*100:.0f}%"],
+            ["Debt (loan)",         f"${_debt:,.0f}",   f"{inputs.get('ltv',0):.0f}%"],
+            ["LTV",                 f"{inputs.get('ltv',0):.0f}%", "—"],
+            ["Interest Rate",       f"{inputs.get('interest_rate',0):.1f}%", "—"],
+            ["Loan Term",           f"{inputs.get('loan_term_years',0)} yrs", "—"],
+            ["Annual Debt Service", f"${_ds:,.0f}" if _ds else "N/A", "—"],
+            ["DSCR",                dscr_str, "—"],
+            ["—","—","—"],
+            ["—","—","—"],
+            ["TOTAL CAPEX",         f"${_capex:,.0f}", "100%"],
+        ]
+        cw = W/2 - 0.1*cm
+        cap_side = Table(
+            [[styled_tbl(capex_plant,[cw*0.56,cw*0.24,cw*0.20], highlight_rows=[len(capex_plant)-1]),
+              styled_tbl(capex_fund, [cw*0.56,cw*0.24,cw*0.20], highlight_rows=[len(capex_fund)-1])]],
+            colWidths=[cw, cw])
+        cap_side.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(1,0),(-1,-1),6)]))
+        story.append(cap_side)
+
+        # ═══════════════════════════════════════════════
+        # PAGE 3 — Break-even + Scenarios
+        # ═══════════════════════════════════════════════
+        story.append(PageBreak())
+        story.append(Paragraph("Break-Even Analysis & Price Scenarios", s_title))
+        story.append(grn_rule())
+
+        story.append(Paragraph("Break-Even Analysis", s_section))
+        story.append(sec_rule())
+        be_data = [["Metric","Value","Note"],
+            ["Annual Production",        f"{_kg:,.0f} kg/yr", "—"],
+            ["Current Realised Price",   f"${_price:.2f}/kg", inputs.get("price_scenario","base").title()+" scenario"],
+            ["Break-Even Price",         f"${_be_price:.2f}/kg" if _be_price else "N/A", "Total costs ÷ annual production"],
+            ["Price Headroom / Gap",
+             (f"+{_price_hdroom:.0f}% above B/E" if _price_hdroom and _price_hdroom>0
+              else f"{_price_hdroom:.0f}% below B/E" if _price_hdroom else "N/A"),
+             "Positive = viable at current price"],
+            ["Break-Even Yield",         f"{_be_yield:.2f} kg/m²/cycle" if _be_yield else "N/A",
+             "Min yield to cover all costs"],
+            ["Total Annual Costs",       f"${_costs:,.0f}", "Excl. depreciation & debt service"],
+            ["EBITDA",                   f"${_ebitda:,.0f} ({r['ebitda_margin']*100:.1f}%)", "—"],
+            ["Energy Intensity",         f"${r['annual_energy_cost']/_kg:.2f}/kg" if _kg>0 else "—",
+             "Energy cost per kg produced"],
+            ["Labour Cost/kg",           f"${r['annual_labour_cost']/_kg:.2f}/kg" if _kg>0 else "—", "—"],
+            ["Revenue per m²",           f"${_rev/(int(inputs.get('footprint',1)) or 1):,.0f}/m²/yr", "Gross floor area"],
+        ]
+        story.append(styled_tbl(be_data, [W*0.35, W*0.28, W*0.37], highlight_rows=[3]))
+
+        story.append(Spacer(1,0.4*cm))
+        story.append(Paragraph("Price Sensitivity — Three Scenarios", s_section))
+        story.append(sec_rule())
+        story.append(chart_flow(fig_scen, 17, 6, 1000, 350))
+        scen_tbl = [["Scenario","Revenue","EBITDA","Margin","vs Base"],
+            [_scen_names[0], f"${_scen_rev[0]:,.0f}", f"${_scen_ebitda[0]:,.0f}",
+             f"{_scen_margin[0]:.1f}%", f"${_scen_ebitda[0]-_ebitda:,.0f}"],
+            [_scen_names[1], f"${_scen_rev[1]:,.0f}", f"${_scen_ebitda[1]:,.0f}",
+             f"{_scen_margin[1]:.1f}%", "— (base)"],
+            [_scen_names[2], f"${_scen_rev[2]:,.0f}", f"${_scen_ebitda[2]:,.0f}",
+             f"{_scen_margin[2]:.1f}%", f"+${_scen_ebitda[2]-_ebitda:,.0f}"],
+        ]
+        story.append(styled_tbl(scen_tbl, [W*0.28,W*0.18,W*0.18,W*0.18,W*0.18],
+            highlight_rows=[2], highlight_color=colors.HexColor("#e3f2fd")))
+
+        # ═══════════════════════════════════════════════
+        # PAGE 4 — Sensitivity + DCF
+        # ═══════════════════════════════════════════════
+        story.append(PageBreak())
+        story.append(Paragraph("Sensitivity Analysis & Investment Returns", s_title))
+        story.append(grn_rule())
+
+        story.append(Paragraph("Key Driver Sensitivity — EBITDA Tornado", s_section))
+        story.append(sec_rule())
         story.append(Paragraph(
-            f"Agricultural Intelligence Portal &nbsp;·&nbsp; CEA Feasibility Report &nbsp;·&nbsp; "
-            f"For indicative purposes only. Not investment advice. &nbsp;·&nbsp; {report_date}",
-            s_footer,
-        ))
-    
+            "Each bar shows the EBITDA impact when one variable is stressed independently, "
+            "all others held at base.", s_note))
+        story.append(chart_flow(fig_torn, 17, 6, 1000, 330))
+        story.append(Spacer(1,0.2*cm))
+        torn_tbl = [["Driver","Pessimistic","EBITDA Δ","Optimistic","EBITDA Δ"]]
+        for _tv in _tvars:
+            torn_tbl.append([_tv["label"], _tv["pess_label"],
+                f"${_tv['delta_pess']:,.0f}",
+                _tv["opt_label"],
+                f"+${_tv['delta_opt']:,.0f}" if _tv["delta_opt"]>0 else f"${_tv['delta_opt']:,.0f}"])
+        story.append(styled_tbl(torn_tbl, [W*0.18,W*0.22,W*0.14,W*0.22,W*0.24]))
+        story.append(Spacer(1,0.4*cm))
+
+        story.append(Paragraph("10-Year Cumulative NPV", s_section))
+        story.append(sec_rule())
+        story.append(chart_flow(fig_dcf, 17, 7, 1000, 420))
+        story.append(Spacer(1,0.3*cm))
+
+        dcf_data = [["Year","FCFE ($)","PV ($)","Cumulative NPV ($)"]]
+        for d in _dcf:
+            dcf_data.append([str(d["year"]),f"${d['fcfe']:,.0f}",
+                             f"${d['pv']:,.0f}",f"${d['cumulative_npv']:,.0f}"])
+        story.append(Paragraph("DCF Cash Flow Detail", s_section))
+        story.append(sec_rule())
+        story.append(styled_tbl(dcf_data, [W*0.10,W*0.28,W*0.28,W*0.34]))
+
+        # ═══════════════════════════════════════════════
+        # PAGE 5 — Config + Production metrics + Risk + Methodology
+        # ═══════════════════════════════════════════════
+        story.append(PageBreak())
+        story.append(Paragraph("System Configuration & Risk Factors", s_title))
+        story.append(grn_rule())
+
+        story.append(Paragraph("System Configuration", s_section))
+        story.append(sec_rule())
+        params_data = [["Parameter","Value","Parameter","Value"],
+            ["Country",          inputs["country"],                    "Crop",            inputs["crop"]],
+            ["Footprint",        f"{int(inputs['footprint']):,} m²",  "Levels",          str(int(inputs["levels"]))],
+            ["Effective Grow",   f"{r['effective_grow_area']:,.0f} m²","Net Grow Factor", f"{inputs.get('net_grow_factor',85)}%"],
+            ["Lights Tier",      inputs.get("lights_tier","—"),        "HVAC Severity",   inputs.get("hvac","—")],
+            ["Automation",       inputs["automation"],                  "Harvest Mode",    inputs.get("harvest_mode","—")],
+            ["Price Scenario",   inputs["price_scenario"],             "Selling Price",   f"${_price:.2f}/kg"],
+            ["Cycles/Year",      str(r["cycles_per_year"]),            "Annual Output",   f"{_kg:,.0f} kg"],
+            ["Loss Rate",        f"{inputs.get('loss_rate',5):.1f}%", "Packaging Cost",  f"${inputs.get('packaging_cost',0.25):.2f}/kg"],
+            ["LTV",              f"{inputs.get('ltv',0):.0f}%",       "Interest Rate",   f"{inputs.get('interest_rate',0):.1f}%"],
+            ["Loan Term",        f"{inputs.get('loan_term_years',0)} yrs","Discount Rate",f"{inputs.get('discount_rate',10):.1f}%"],
+            ["Depreciation",     f"{inputs.get('depreciation_years',0)} yrs","Tax Rate", f"{inputs.get('tax_rate',0):.1f}%"],
+            ["Water Price",      f"${inputs.get('water_price',0):.2f}/m³","Rent/mo",     f"${inputs.get('rent_monthly',0):,.0f}"],
+        ]
+        story.append(styled_tbl(params_data, [W/4]*4))
+        story.append(Spacer(1,0.4*cm))
+
+        story.append(Paragraph("Production & Efficiency Metrics", s_section))
+        story.append(sec_rule())
+        _fp = int(inputs.get("footprint",1)) or 1
+        _ea = r.get("effective_grow_area", _fp)
+        prod_data = [["Metric","Value","Benchmark","Note"],
+            ["Annual Production",       f"{_kg:,.0f} kg/yr",           "—", "—"],
+            ["Yield per m² (gross)",    f"{_kg/_fp:.1f} kg/m²/yr",     "VF: 80–200 kg/m²/yr", "Gross footprint"],
+            ["Yield per m² (net grow)", f"{_kg/_ea:.1f} kg/m²/yr" if _ea>0 else "—", "—", "Net growing area"],
+            ["Revenue per m²",          f"${_rev/_fp:,.0f}/m²/yr",     "—", "Gross footprint"],
+            ["Energy Intensity",        f"${r['annual_energy_cost']/_kg:.2f}/kg" if _kg>0 else "—",
+             "VF: $1–5/kg target", "Energy cost per kg"],
+            ["Labour Cost/kg",          f"${r['annual_labour_cost']/_kg:.2f}/kg" if _kg>0 else "—",
+             "—", "—"],
+            ["Energy kWh/kg",           f"{r.get('annual_kwh',0)/_kg:.1f} kWh/kg" if _kg>0 else "—",
+             "VF benchmark: 25–40 kWh/kg", "—"],
+        ]
+        story.append(styled_tbl(prod_data, [W*0.30,W*0.20,W*0.25,W*0.25]))
+        story.append(Spacer(1,0.4*cm))
+
+        # Risk matrix
+        story.append(Paragraph("Key Risk Factors", s_section))
+        story.append(sec_rule())
+        _risks = []
+        if _dscr and _dscr < 1.0:
+            _risks.append(["HIGH","Debt Coverage",
+                f"DSCR {_dscr:.2f}x — EBITDA insufficient to service debt. "
+                f"Consider reducing LTV from {inputs.get('ltv',0):.0f}% or extending loan term."])
+        elif _dscr and _dscr < 1.25:
+            _risks.append(["MEDIUM","Debt Coverage",
+                f"DSCR {_dscr:.2f}x — below standard 1.25x lender minimum. Marginal serviceability."])
+        if _energy_pct > 40:
+            _risks.append(["HIGH","Energy Viability",
+                f"Energy = {_energy_pct:.1f}% of revenue, above 40% structural viability threshold. "
+                "Project is energy-cost-constrained at current electricity prices."])
+        elif _energy_pct > 25:
+            _risks.append(["MEDIUM","Energy Exposure",
+                f"Energy = {_energy_pct:.1f}% of revenue. High sensitivity to electricity price volatility."])
+        if _price_hdroom is not None and _price_hdroom < 10:
+            _risks.append(["MEDIUM","Price Sensitivity",
+                f"Only {abs(_price_hdroom):.0f}% price headroom above break-even at ${_be_price:.2f}/kg. "
+                "A modest market price decline would flip EBITDA negative."])
+        _risks += [
+            ["LOW","Crop Biology","Controlled environment reduces but does not eliminate biological risk. "
+             "Crop failure, disease, or pest pressure scenarios not modelled."],
+            ["LOW","Market Volatility","Wholesale fresh produce prices can deviate significantly from "
+             "price scenario assumptions. Revenue sensitivity shown in tornado chart."],
+            ["LOW","Labour Availability","Skilled labour for CEA operations may be scarce "
+             "in some geographies. Turnover risk is not modelled."],
+            ["LOW","Technology Risk","LED and HVAC equipment efficiency assumptions are based on "
+             "current benchmarks. Technological obsolescence not modelled."],
+        ]
+        risk_t = Table([["Severity","Risk Factor","Description"]] + _risks,
+                       colWidths=[W*0.12, W*0.24, W*0.64], repeatRows=1)
+        risk_ts = [
+            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),
+            ("BACKGROUND",(0,0),(-1,0),DARK_BG),("TEXTCOLOR",(0,0),(-1,0),GREEN),
+            ("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#dddddd")),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+            ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+            ("VALIGN",(0,0),(-1,-1),"TOP"),("FONTNAME",(0,1),(-1,-1),"Helvetica"),
+            ("TEXTCOLOR",(0,1),(-1,-1),DARK_BG),
+        ]
+        for i, rx in enumerate(_risks, start=1):
+            if rx[0]=="HIGH":
+                risk_ts += [("TEXTCOLOR",(0,i),(0,i),RED_COL),("FONTNAME",(0,i),(0,i),"Helvetica-Bold")]
+            elif rx[0]=="MEDIUM":
+                risk_ts += [("TEXTCOLOR",(0,i),(0,i),AMBER),("FONTNAME",(0,i),(0,i),"Helvetica-Bold")]
+            else:
+                risk_ts.append(("TEXTCOLOR",(0,i),(0,i),MID_GREY))
+            if i%2==1:
+                risk_ts.append(("BACKGROUND",(1,i),(-1,i),LIGHT_ROW))
+        risk_t.setStyle(TableStyle(risk_ts))
+        story.append(risk_t)
+
+        story.append(Spacer(1,0.5*cm))
+        story.append(Paragraph("Methodology & Assumptions", s_section))
+        story.append(sec_rule())
+        story.append(Paragraph(
+            "This report is generated by the Agricultural Intelligence Portal CEA financial model. "
+            "Vertical farm P&L is computed using a multi-level stacked-LED model with country-specific "
+            "energy, labour, and water pricing. CAPEX figures are based on industry benchmarks "
+            "scaled to effective grow area. DCF analysis uses FCFE discounted at the specified rate "
+            f"({inputs.get('discount_rate',10):.1f}%). Break-even prices are total annual costs divided "
+            "by annual production — they exclude CAPEX amortisation. Sensitivity analysis stresses "
+            "individual variables independently while holding all others at base values. "
+            "Results are indicative and should be validated with site-specific engineering "
+            "and market studies before investment decisions.", s_note))
+
+        story.append(Spacer(1,0.4*cm))
+        story.append(HRFlowable(width="100%",thickness=0.5,color=colors.HexColor("#cccccc"),spaceAfter=4))
+        story.append(footer_para())
+
         doc.build(story)
         buffer.seek(0)
         return buffer.read()
-    
+
+
     # ── Key metrics ───────────────────────────────────────────────────────────────
     # ── PDF Download Button ───────────────────────────────────────────────────
     pdf_col1, pdf_col2 = st.columns([5, 1])
@@ -2275,29 +2465,31 @@ elif modality == "🌿 High-Tech Greenhouse":
                                 rightMargin=2*cm, leftMargin=2*cm,
                                 topMargin=2*cm, bottomMargin=2*cm)
         W = A4[0] - 4*cm
-        GREEN     = colors.HexColor("#00e5a0")
-        DARK_BG   = colors.HexColor("#1a1a2e")
-        LIGHT_ROW = colors.HexColor("#f7f7f7")
-        MID_GREY  = colors.HexColor("#8892a0")
-        RED_COL   = colors.HexColor("#ff4d4d")
-        AMBER     = colors.HexColor("#ffc13d")
+        GREEN    = colors.HexColor("#00e5a0")
+        DARK_BG  = colors.HexColor("#1a1a2e")
+        LIGHT_ROW= colors.HexColor("#f7f7f7")
+        MID_GREY = colors.HexColor("#8892a0")
+        RED_COL  = colors.HexColor("#ff4d4d")
+        AMBER    = colors.HexColor("#ffc13d")
 
         def ps(name, size, color, bold=False, align=TA_LEFT, space_before=0, space_after=4):
             return ParagraphStyle(name, fontSize=size, textColor=color,
                 fontName="Helvetica-Bold" if bold else "Helvetica",
                 alignment=align, spaceBefore=space_before, spaceAfter=space_after,
-                leading=size * 1.35)
+                leading=size*1.35)
 
-        s_title   = ps("GHTitle",  22, DARK_BG, bold=True,  align=TA_LEFT, space_after=2)
-        s_sub     = ps("GHSub",    10, MID_GREY, align=TA_LEFT, space_after=14)
-        s_section = ps("GHSect",   12, DARK_BG, bold=True,  align=TA_LEFT, space_before=10, space_after=5)
-        s_footer  = ps("GHFooter",  7, MID_GREY, align=TA_CENTER, space_after=0)
-        s_kpi_val = ps("GHKPIVal", 18, DARK_BG, bold=True,  align=TA_CENTER, space_after=0)
-        s_kpi_lbl = ps("GHKPILbl",  8, MID_GREY, align=TA_CENTER, space_after=0)
-
+        s_title  = ps("GHTitle", 22, DARK_BG, bold=True,  align=TA_LEFT, space_after=2)
+        s_sub    = ps("GHSub",   10, MID_GREY, align=TA_LEFT, space_after=14)
+        s_section= ps("GHSect",  12, DARK_BG, bold=True,  align=TA_LEFT, space_before=10, space_after=5)
+        s_body   = ps("GHBody",   9, colors.HexColor("#2c2c2c"), space_after=6)
+        s_note   = ps("GHNote",   8, MID_GREY, space_after=3)
+        s_warn   = ps("GHWarn",   8, RED_COL, bold=True, space_after=4)
+        s_footer = ps("GHFooter", 7, MID_GREY, align=TA_CENTER, space_after=0)
+        s_kpi_val= ps("GHKPIv", 18, DARK_BG, bold=True, align=TA_CENTER, space_after=0)
+        s_kpi_lbl= ps("GHKPIl",  8, MID_GREY, align=TA_CENTER, space_after=0)
         report_date = date.today().strftime("%d %B %Y")
 
-        def styled_table_gh(data, col_widths, row_colors=True):
+        def styled_tbl(data, col_widths, highlight_rows=None, highlight_color=None):
             t = Table(data, colWidths=col_widths, repeatRows=1)
             ts = [
                 ("FONTNAME",     (0,0),(-1,0),  "Helvetica-Bold"),
@@ -2306,7 +2498,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                 ("TEXTCOLOR",    (0,0),(-1,0),  GREEN),
                 ("FONTNAME",     (0,1),(-1,-1), "Helvetica"),
                 ("FONTSIZE",     (0,1),(-1,-1), 8),
-                ("TEXTCOLOR",    (0,1),(-1,-1), colors.HexColor("#1a1a2e")),
+                ("TEXTCOLOR",    (0,1),(-1,-1), DARK_BG),
                 ("GRID",         (0,0),(-1,-1), 0.3, colors.HexColor("#dddddd")),
                 ("TOPPADDING",   (0,0),(-1,-1), 4),
                 ("BOTTOMPADDING",(0,0),(-1,-1), 4),
@@ -2314,9 +2506,13 @@ elif modality == "🌿 High-Tech Greenhouse":
                 ("RIGHTPADDING", (0,0),(-1,-1), 6),
                 ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
             ]
-            if row_colors:
-                for i in range(1, len(data)):
-                    ts.append(("BACKGROUND",(0,i),(-1,i), LIGHT_ROW if i%2==1 else colors.white))
+            for i in range(1, len(data)):
+                ts.append(("BACKGROUND",(0,i),(-1,i), LIGHT_ROW if i%2==1 else colors.white))
+            if highlight_rows and highlight_color:
+                for hr in highlight_rows:
+                    if 0 <= hr < len(data):
+                        ts.append(("BACKGROUND",(0,hr),(-1,hr), highlight_color))
+                        ts.append(("FONTNAME",(0,hr),(-1,hr),"Helvetica-Bold"))
             t.setStyle(TableStyle(ts))
             return t
 
@@ -2325,89 +2521,188 @@ elif modality == "🌿 High-Tech Greenhouse":
                               font_color="#161a16", margin=dict(l=40,r=40,t=40,b=40))
             return io.BytesIO(pio.to_image(fig, format="png", width=width_px, height=height_px, scale=2))
 
-        def chart_flowable_gh(fig, width_cm, height_cm, width_px=900, height_px=380):
+        def chart_flow(fig, w_cm, h_cm, w_px=900, h_px=380):
             from reportlab.platypus import Image as RLImage
-            return RLImage(chart_png_gh(fig, width_px, height_px), width=width_cm*cm, height=height_cm*cm)
+            return RLImage(chart_png_gh(fig, w_px, h_px), width=w_cm*cm, height=h_cm*cm)
 
-        # Build charts for PDF
-        _bridge_labels = ["Revenue","Variable","Water","Energy","Labour","Rent","Maint.","EBITDA"]
-        _bridge_values = [gh_r["annual_revenue"],-gh_r["annual_variable_cost"],-gh_r["annual_water_cost"],
-                          -gh_r["annual_energy_cost"],-gh_r["annual_labour_cost"],
-                          -gh_r["annual_rent"],-gh_r["annual_maintenance"],gh_r["ebitda"]]
-        _bridge_colors = ["#00c87a" if i==0 or (i==len(_bridge_values)-1 and v>=0) else "#ff6b6b"
-                          for i,v in enumerate(_bridge_values)]
-        fig_gh_bridge = go.Figure(go.Bar(x=_bridge_labels, y=_bridge_values, marker_color=_bridge_colors,
-                                         text=[f"${abs(v)/1e3:.0f}K" for v in _bridge_values], textposition="outside"))
-        fig_gh_bridge.update_layout(title="EBITDA Bridge ($)", showlegend=False,
-                                     yaxis=dict(showgrid=True, gridcolor="#eeeeee"),
-                                     xaxis=dict(showgrid=False))
+        def sec_rule(): return HRFlowable(width="100%",thickness=0.5,color=colors.HexColor("#dddddd"),spaceAfter=6)
+        def grn_rule(): return HRFlowable(width="100%",thickness=2,color=GREEN,spaceAfter=10)
+        def kpi_cell(v, lbl): return [Paragraph(v, s_kpi_val), Paragraph(lbl, s_kpi_lbl)]
+        def footer_para(): return Paragraph(
+            f"Agricultural Intelligence Portal &nbsp;·&nbsp; CEA Feasibility Report &nbsp;·&nbsp; "
+            f"For indicative purposes only. Not investment advice. &nbsp;·&nbsp; {report_date}", s_footer)
 
-        fig_gh_cost = go.Figure(go.Pie(
+        # ── Pre-compute scalars ────────────────────────────────────────────────
+        _rev   = gh_r["annual_revenue"]
+        _ebitda= gh_r["ebitda"]
+        _capex = gh_r["total_capex"]
+        _costs = gh_r["total_annual_costs"]
+        _kg    = gh_r["total_annual_kg"]
+        _price = gh_r["effective_price"]
+        _energy_pct = gh_r["annual_energy_cost"] / _rev * 100 if _rev > 0 else 0
+        _loss_r = gh_inputs.get("loss_rate", 5) / 100
+        _denom  = _price * (1-_loss_r) * gh_r["cycles_per_year"] * gh_r["effective_grow_area"]
+        _be_yield = _costs / _denom if _denom > 0 else None
+        _be_price = _costs / _kg if _kg > 0 else None
+        _price_hdroom = ((_price - _be_price) / _price * 100) if _be_price and _price > 0 else None
+        _equity = _capex * (1 - gh_inputs.get("ltv", 0)/100)
+        _debt   = _capex * gh_inputs.get("ltv", 0)/100
+        _ds     = gh_r.get("annual_debt_service", 0)
+        _dscr   = _ebitda / _ds if _ds > 0 else None
+        _modality_label = "Polytunnel" if gh_inputs.get("crop_source","").lower()=="polytunnel" else "High-Tech Greenhouse"
+        viab_label = "VIABLE" if _energy_pct < 40 else ("MARGINAL" if _energy_pct < 70 else "NOT VIABLE")
+        viab_color = colors.HexColor("#00c87a") if _energy_pct < 40 else (AMBER if _energy_pct < 70 else RED_COL)
+        payback_str = f"{gh_r['payback_years']:.1f} yrs" if gh_r.get("payback_years") else "N/A"
+        dscr_str    = f"{_dscr:.2f}x" if _dscr else "N/A"
+
+        # ── Sensitivity runs ───────────────────────────────────────────────────
+        _tvars = [
+            {"label":"Selling Price",  "pess":_gh_run_mult(gh_inputs,prc_m=0.80)["ebitda"], "opt":_gh_run_mult(gh_inputs,prc_m=1.20)["ebitda"],
+             "pess_label":"Price −20%","opt_label":"Price +20%"},
+            {"label":"Energy Price",   "pess":_gh_run_mult(gh_inputs,kwh_m=1.50)["ebitda"], "opt":_gh_run_mult(gh_inputs,kwh_m=0.70)["ebitda"],
+             "pess_label":"Energy +50%","opt_label":"Energy −30%"},
+            {"label":"Yield",          "pess":_gh_run_mult(gh_inputs,yld_m=0.80)["ebitda"], "opt":_gh_run_mult(gh_inputs,yld_m=1.20)["ebitda"],
+             "pess_label":"Yield −20%","opt_label":"Yield +20%"},
+            {"label":"Labour Cost",    "pess":_gh_run_mult(gh_inputs,lab_m=1.30)["ebitda"], "opt":_gh_run_mult(gh_inputs,lab_m=0.80)["ebitda"],
+             "pess_label":"Labour +30%","opt_label":"Labour −20%"},
+        ]
+        for _tv in _tvars:
+            _tv["delta_pess"] = _tv["pess"] - _ebitda
+            _tv["delta_opt"]  = _tv["opt"]  - _ebitda
+            _tv["swing"]      = abs(_tv["delta_opt"] - _tv["delta_pess"])
+        _tvars.sort(key=lambda x: x["swing"], reverse=True)
+
+        _s_pess = _gh_run_mult(gh_inputs, prc_m=0.80)
+        _s_opt  = _gh_run_mult(gh_inputs, prc_m=1.20)
+        _scen_names  = ["Low Price (−20%)", "Base Case", "High Price (+20%)"]
+        _scen_ebitda = [_s_pess["ebitda"], _ebitda, _s_opt["ebitda"]]
+        _scen_margin = [_s_pess["ebitda_margin"]*100, gh_r["ebitda_margin"]*100, _s_opt["ebitda_margin"]*100]
+        _scen_rev    = [_s_pess["annual_revenue"], _rev, _s_opt["annual_revenue"]]
+        _scen_colors = ["#ff6b6b" if e<0 else ("#ffc13d" if e<_rev*0.10 else "#00c87a") for e in _scen_ebitda]
+
+        # ── Charts ─────────────────────────────────────────────────────────────
+        _bl = ["Revenue","Variable","Water","Energy","Labour","Rent","Maint.","EBITDA"]
+        _bv = [_rev,-gh_r["annual_variable_cost"],-gh_r["annual_water_cost"],
+               -gh_r["annual_energy_cost"],-gh_r["annual_labour_cost"],
+               -gh_r["annual_rent"],-gh_r["annual_maintenance"],_ebitda]
+        _bc = ["#00c87a" if i==0 or (i==len(_bv)-1 and v>=0) else "#ff6b6b" for i,v in enumerate(_bv)]
+        fig_bridge = go.Figure(go.Bar(x=_bl, y=_bv, marker_color=_bc,
+            text=[f"${abs(v)/1e3:.0f}K" for v in _bv], textposition="outside"))
+        fig_bridge.update_layout(title="EBITDA Bridge ($)", showlegend=False,
+            yaxis=dict(showgrid=True, gridcolor="#eeeeee"), xaxis=dict(showgrid=False))
+
+        fig_cost = go.Figure(go.Pie(
             labels=["Energy","Labour","Variable","Water","Maintenance","Rent"],
             values=[gh_r["annual_energy_cost"],gh_r["annual_labour_cost"],gh_r["annual_variable_cost"],
                     gh_r["annual_water_cost"],gh_r["annual_maintenance"],gh_r["annual_rent"]],
             hole=0.48, marker_colors=["#ff4d4d","#ffc13d","#00c87a","#4fc3f7","#ba68c8","#ef9a9a"],
-            textinfo="percent+label", textfont_size=9))
-        fig_gh_cost.update_layout(title="Cost Mix", showlegend=False)
+            textinfo="percent+label", textfont_size=8))
+        fig_cost.update_layout(title="Cost Mix", showlegend=False)
 
-        fig_gh_capex = go.Figure(go.Pie(
+        fig_capex = go.Figure(go.Pie(
             labels=["Structure","Climate","Irrigation","Lighting","Automation","Real Estate"],
             values=[gh_r["structure_capex"],gh_r["climate_capex"],gh_r["irrigation_capex"],
                     gh_r["lighting_capex"],gh_r["automation_capex"],gh_r["real_estate_capex"]],
             hole=0.48, marker_colors=["#00e5a0","#26c6da","#66bb6a","#ffa726","#ab47bc","#8d6e63"],
-            textinfo="percent+label", textfont_size=9))
-        fig_gh_capex.update_layout(title="CAPEX Mix", showlegend=False)
+            textinfo="percent+label", textfont_size=8))
+        fig_capex.update_layout(title="CAPEX Mix", showlegend=False)
 
-        _dcf_cumul = [d["cumulative_npv"] for d in gh_r["dcf_cashflows"]]
-        fig_gh_dcf = go.Figure()
-        fig_gh_dcf.add_trace(go.Scatter(
-            x=[d["year"] for d in gh_r["dcf_cashflows"]], y=_dcf_cumul,
+        _dcf = gh_r.get("dcf_cashflows", [])
+        _dcf_cumul = [d["cumulative_npv"] for d in _dcf]
+        fig_dcf = go.Figure()
+        fig_dcf.add_trace(go.Scatter(
+            x=[d["year"] for d in _dcf], y=_dcf_cumul,
             mode="lines+markers", line=dict(color="#00c87a", width=2.5),
             marker=dict(color=["#00c87a" if v>=0 else "#ff4d4d" for v in _dcf_cumul], size=7),
             fill="tozeroy", fillcolor="rgba(0,200,122,0.08)"))
-        fig_gh_dcf.add_hline(y=0, line_dash="dash", line_color="#cccccc")
-        fig_gh_dcf.update_layout(title="Cumulative NPV — 10-Year DCF ($)",
-                                  xaxis=dict(title="Year", showgrid=False, dtick=1),
-                                  yaxis=dict(title="$", showgrid=True, gridcolor="#eeeeee"))
+        fig_dcf.add_hline(y=0, line_dash="dash", line_color="#cccccc")
+        fig_dcf.update_layout(title="Cumulative NPV — 10-Year DCF ($)",
+            xaxis=dict(title="Year", showgrid=False, dtick=1),
+            yaxis=dict(title="$", showgrid=True, gridcolor="#eeeeee"))
 
-        _gh_ep = gh_r["annual_energy_cost"]/gh_r["annual_revenue"]*100 if gh_r["annual_revenue"]>0 else 0
-        viab_label = "VIABLE" if _gh_ep<40 else ("MARGINAL" if _gh_ep<70 else "NOT VIABLE")
-        viab_color = colors.HexColor("#00c87a") if _gh_ep<40 else (AMBER if _gh_ep<70 else RED_COL)
+        fig_torn = go.Figure()
+        for _tv in _tvars:
+            fig_torn.add_trace(go.Bar(name="Pessimistic", y=[_tv["label"]], x=[_tv["delta_pess"]],
+                orientation="h", marker_color="rgba(255,77,77,0.75)",
+                showlegend=(_tv==_tvars[0]), text=f"${_tv['delta_pess']:,.0f}", textposition="outside"))
+            fig_torn.add_trace(go.Bar(name="Optimistic", y=[_tv["label"]], x=[_tv["delta_opt"]],
+                orientation="h", marker_color="rgba(0,229,160,0.75)",
+                showlegend=(_tv==_tvars[0]), text=f"${_tv['delta_opt']:,.0f}", textposition="outside"))
+        fig_torn.add_vline(x=0, line_dash="dash", line_color="#888888")
+        fig_torn.update_layout(barmode="overlay", height=280, margin=dict(l=10,r=80,t=30,b=20),
+            title="EBITDA Sensitivity — Key Drivers",
+            xaxis=dict(title="EBITDA delta ($)", showgrid=False),
+            yaxis=dict(showgrid=False),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 
-        _gh_loss_r = gh_inputs.get("loss_rate",5)/100
-        _gh_denom_pdf = gh_r["effective_price"]*(1-_gh_loss_r)*gh_r["cycles_per_year"]*gh_r["effective_grow_area"]
-        _gh_be = gh_r["total_annual_costs"]/_gh_denom_pdf if _gh_denom_pdf>0 else None
+        fig_scen = go.Figure()
+        fig_scen.add_trace(go.Bar(name="Revenue", x=_scen_names, y=_scen_rev,
+            marker_color=["rgba(0,200,122,0.3)"]*3,
+            text=[f"${v/1e3:.0f}K" for v in _scen_rev], textposition="outside"))
+        fig_scen.add_trace(go.Bar(name="EBITDA", x=_scen_names, y=_scen_ebitda,
+            marker_color=_scen_colors,
+            text=[f"${v/1e3:.0f}K" for v in _scen_ebitda], textposition="outside"))
+        fig_scen.update_layout(barmode="group", title="Price Scenario Comparison",
+            height=280, margin=dict(l=10,r=20,t=40,b=20),
+            yaxis=dict(showgrid=True, gridcolor="#eeeeee"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 
+        # ── STORY ──────────────────────────────────────────────────────────────
         story = []
-        def sec_rule(): return HRFlowable(width="100%",thickness=0.5,color=colors.HexColor("#dddddd"),spaceAfter=6)
-        def grn_rule(): return HRFlowable(width="100%",thickness=2,color=GREEN,spaceAfter=10)
 
-        _modality_label = "Polytunnel" if gh_inputs.get("crop_source","").lower()=="polytunnel" else "High-Tech Greenhouse"
-        story.append(Paragraph(f"CEA Feasibility Summary — {_modality_label}", s_title))
+        # PAGE 1 — Executive Summary + KPIs + Bridge
+        story.append(Paragraph(f"CEA Feasibility Report — {_modality_label}", s_title))
         story.append(Paragraph(
             f"{gh_inputs['crop']} &nbsp;·&nbsp; {gh_inputs['country']} &nbsp;·&nbsp; "
             f"{int(gh_inputs['footprint']):,} m² &nbsp;·&nbsp; {gh_inputs['automation']} automation &nbsp;·&nbsp; "
-            f"{gh_r['structure_type']} structure &nbsp;·&nbsp; {report_date}", s_sub))
+            f"{gh_r.get('structure_type','—')} structure &nbsp;·&nbsp; {report_date}", s_sub))
         story.append(grn_rule())
 
-        viab_style = ParagraphStyle("GHViab",fontSize=10,textColor=viab_color,
-                                     fontName="Helvetica-Bold",alignment=TA_CENTER,spaceAfter=10)
+        viab_style = ParagraphStyle("GHViab2", fontSize=10, textColor=viab_color,
+            fontName="Helvetica-Bold", alignment=TA_CENTER,
+            backColor=colors.HexColor("#f0faf5") if _energy_pct<40 else colors.HexColor("#fff8e1"),
+            spaceAfter=10, borderPadding=6)
         story.append(Paragraph(
-            f"Structural Viability Signal: {viab_label} &nbsp;|&nbsp; Energy = {_gh_ep:.1f}% of Revenue"
-            + (f" &nbsp;|&nbsp; Break-even yield = {_gh_be:.2f} kg/m²/cycle" if _gh_be else ""), viab_style))
+            f"&#9679; Structural Viability: <b>{viab_label}</b> &nbsp;|&nbsp; "
+            f"Energy = {_energy_pct:.1f}% of Revenue &nbsp;|&nbsp; Modality: {_modality_label}", viab_style))
 
-        def kpi_cell(v, lbl): return [Paragraph(v, s_kpi_val), Paragraph(lbl, s_kpi_lbl)]
-        payback_str = f"{gh_r['payback_years']:.1f} yrs" if gh_r["payback_years"] else "N/A"
-        dscr_str    = f"{gh_r['dscr']:.2f}x" if gh_r["dscr"] else "N/A"
+        story.append(Paragraph("Executive Summary", s_section))
+        story.append(sec_rule())
+        _viab_txt = ("The farm achieves a positive EBITDA" if _ebitda > 0
+                     else "The farm currently produces a negative EBITDA")
+        _energy_txt = (f"Energy costs represent {_energy_pct:.1f}% of revenue — "
+                       + ("within the viable threshold." if _energy_pct < 40
+                          else "above the 40% structural viability threshold."))
+        _be_txt = (f"Break-even requires a minimum selling price of ${_be_price:.2f}/kg"
+                   + (f" — {abs(_price_hdroom):.0f}% {'below' if _price_hdroom < 0 else 'above'} "
+                      f"current realisation of ${_price:.2f}/kg."
+                      if _price_hdroom is not None else "."))
+        _dscr_txt = ""
+        if _dscr and _dscr < 1.0:
+            _dscr_txt = (f" The DSCR of {_dscr:.2f}x indicates EBITDA cannot cover debt service "
+                         f"at {gh_inputs.get('ltv',0)}% LTV.")
+        elif _dscr and _dscr >= 1.25:
+            _dscr_txt = f" The DSCR of {_dscr:.2f}x meets standard lender thresholds (1.25x minimum)."
+        story.append(Paragraph(
+            f"{_viab_txt} of ${_ebitda:,.0f}/yr ({gh_r['ebitda_margin']*100:.1f}% margin) on "
+            f"{int(gh_inputs['footprint']):,} m² of {gh_inputs['crop']} "
+            f"({_modality_label}, {gh_r.get('structure_type','—')}). "
+            f"{_energy_txt} {_be_txt}{_dscr_txt}", s_body))
+
+        if _dscr and _dscr < 1.0:
+            story.append(Paragraph(
+                f"⚠ DSCR Alert: debt service coverage ({_dscr:.2f}x) is below 1.0x.", s_warn))
+
+        story.append(Spacer(1, 0.3*cm))
         kpi_data = [
-            [kpi_cell(f"${gh_r['annual_revenue']/1e3:.0f}K","Annual Revenue"),
-             kpi_cell(f"${gh_r['ebitda']/1e3:.0f}K","EBITDA"),
+            [kpi_cell(f"${_rev/1e3:.0f}K","Annual Revenue"),
+             kpi_cell(f"${_ebitda/1e3:.0f}K","EBITDA"),
              kpi_cell(f"{gh_r['ebitda_margin']*100:.1f}%","EBITDA Margin"),
-             kpi_cell(f"${gh_r['total_capex']/1e3:.0f}K","Total CAPEX")],
+             kpi_cell(f"${_capex/1e3:.0f}K","Total CAPEX")],
             [kpi_cell(payback_str,"Payback Period"),
              kpi_cell(dscr_str,"DSCR"),
-             kpi_cell(f"{_gh_ep:.1f}%","Energy % Revenue"),
-             kpi_cell(f"${gh_r['npv']/1e3:.0f}K","NPV (10yr)")],
+             kpi_cell(f"{_energy_pct:.1f}%","Energy % Revenue"),
+             kpi_cell(f"${gh_r.get('npv',0)/1e3:.0f}K","NPV (10yr)")],
         ]
         kpi_t = Table(kpi_data, colWidths=[W/4]*4)
         kpi_t.setStyle(TableStyle([
@@ -2421,86 +2716,249 @@ elif modality == "🌿 High-Tech Greenhouse":
         story.append(Spacer(1,0.4*cm))
         story.append(Paragraph("EBITDA Bridge", s_section))
         story.append(sec_rule())
-        story.append(chart_flowable_gh(fig_gh_bridge, 17, 7, 1000, 420))
+        story.append(chart_flow(fig_bridge, 17, 7, 1000, 420))
 
+        # PAGE 2 — Cost + CAPEX + P&L
         story.append(PageBreak())
-        story.append(Paragraph("Cost & Capital Structure", s_title))
+        story.append(Paragraph("Cost Structure & Capital Requirements", s_title))
         story.append(grn_rule())
-        donut_w = W/2-0.2*cm
-        donut_t = Table([[chart_flowable_gh(fig_gh_cost,8.2,6.5,500,420),
-                          chart_flowable_gh(fig_gh_capex,8.2,6.5,500,420)]],
-                         colWidths=[donut_w,donut_w])
+        donut_w = W/2 - 0.2*cm
+        donut_t = Table([[chart_flow(fig_cost,8.2,6.5,500,420), chart_flow(fig_capex,8.2,6.5,500,420)]],
+                        colWidths=[donut_w, donut_w])
         donut_t.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP")]))
         story.append(donut_t)
         story.append(Spacer(1,0.3*cm))
 
-        total_c = gh_r["total_annual_costs"]
-        rev     = gh_r["annual_revenue"]
-        cost_data = [["Cost Item","Annual ($)","% of Total Costs","% of Revenue"],
-            ["Energy",     f"${gh_r['annual_energy_cost']:,.0f}", f"{gh_r['annual_energy_cost']/total_c*100:.1f}%", f"{gh_r['annual_energy_cost']/rev*100:.1f}%"],
-            ["Labour",     f"${gh_r['annual_labour_cost']:,.0f}", f"{gh_r['annual_labour_cost']/total_c*100:.1f}%", f"{gh_r['annual_labour_cost']/rev*100:.1f}%"],
-            ["Variable",   f"${gh_r['annual_variable_cost']:,.0f}", f"{gh_r['annual_variable_cost']/total_c*100:.1f}%", f"{gh_r['annual_variable_cost']/rev*100:.1f}%"],
-            ["Water",      f"${gh_r['annual_water_cost']:,.0f}", f"{gh_r['annual_water_cost']/total_c*100:.1f}%", f"{gh_r['annual_water_cost']/rev*100:.1f}%"],
-            ["Maintenance",f"${gh_r['annual_maintenance']:,.0f}", f"{gh_r['annual_maintenance']/total_c*100:.1f}%", f"{gh_r['annual_maintenance']/rev*100:.1f}%"],
-            ["Rent",       f"${gh_r['annual_rent']:,.0f}", f"{gh_r['annual_rent']/total_c*100:.1f}%", f"{gh_r['annual_rent']/rev*100:.1f}%"],
-            ["TOTAL",      f"${total_c:,.0f}", "100%", f"{total_c/rev*100:.1f}%"]]
-        story.append(Paragraph("Annual Cost Breakdown", s_section))
+        story.append(Paragraph("Annual P&L", s_section))
         story.append(sec_rule())
-        story.append(styled_table_gh(cost_data,[W*0.32,W*0.23,W*0.23,W*0.22]))
-        story.append(Spacer(1,0.4*cm))
+        pl_data = [["Item","$/year","% of Costs","% of Revenue"],
+            ["Revenue",     f"${_rev:,.0f}",   "—",   "100%"],
+            ["Energy",      f"${gh_r['annual_energy_cost']:,.0f}",
+             f"{gh_r['annual_energy_cost']/_costs*100:.1f}%" if _costs>0 else "—",
+             f"{gh_r['annual_energy_cost']/_rev*100:.1f}%" if _rev>0 else "—"],
+            ["Labour",      f"${gh_r['annual_labour_cost']:,.0f}",
+             f"{gh_r['annual_labour_cost']/_costs*100:.1f}%" if _costs>0 else "—",
+             f"{gh_r['annual_labour_cost']/_rev*100:.1f}%" if _rev>0 else "—"],
+            ["Variable",    f"${gh_r['annual_variable_cost']:,.0f}",
+             f"{gh_r['annual_variable_cost']/_costs*100:.1f}%" if _costs>0 else "—", "—"],
+            ["Water",       f"${gh_r['annual_water_cost']:,.0f}",
+             f"{gh_r['annual_water_cost']/_costs*100:.1f}%" if _costs>0 else "—", "—"],
+            ["Maintenance", f"${gh_r['annual_maintenance']:,.0f}",
+             f"{gh_r['annual_maintenance']/_costs*100:.1f}%" if _costs>0 else "—", "—"],
+            ["Rent",        f"${gh_r['annual_rent']:,.0f}",
+             f"{gh_r['annual_rent']/_costs*100:.1f}%" if _costs>0 else "—", "—"],
+            ["Total Costs", f"${_costs:,.0f}", "100%", f"{_costs/_rev*100:.1f}%" if _rev>0 else "—"],
+            ["EBITDA",      f"${_ebitda:,.0f}", "—", f"{gh_r['ebitda_margin']*100:.1f}%"],
+        ]
+        story.append(styled_tbl(pl_data, [W*0.34,W*0.22,W*0.22,W*0.22],
+            highlight_rows=[len(pl_data)-1],
+            highlight_color=colors.HexColor("#e8f5e9") if _ebitda>=0 else colors.HexColor("#ffebee")))
+        story.append(Spacer(1,0.3*cm))
 
-        capex_data = [["Component","Amount ($)","% of Total CAPEX"],
-            ["Structure",    f"${gh_r['structure_capex']:,.0f}",  f"{gh_r['structure_capex']/gh_r['total_capex']*100:.1f}%"],
-            ["Climate",      f"${gh_r['climate_capex']:,.0f}",    f"{gh_r['climate_capex']/gh_r['total_capex']*100:.1f}%"],
-            ["Irrigation",   f"${gh_r['irrigation_capex']:,.0f}", f"{gh_r['irrigation_capex']/gh_r['total_capex']*100:.1f}%"],
-            ["Lighting",     f"${gh_r['lighting_capex']:,.0f}",   f"{gh_r['lighting_capex']/gh_r['total_capex']*100:.1f}%"],
-            ["Automation",   f"${gh_r['automation_capex']:,.0f}", f"{gh_r['automation_capex']/gh_r['total_capex']*100:.1f}%"],
-            ["Real Estate",  f"${gh_r['real_estate_capex']:,.0f}",f"{gh_r['real_estate_capex']/gh_r['total_capex']*100:.1f}%" if gh_r['total_capex']>0 else "0.0%"],
-            ["TOTAL",        f"${gh_r['total_capex']:,.0f}","100%"]]
-        story.append(Paragraph("CAPEX Breakdown", s_section))
+        story.append(Paragraph("CAPEX Breakdown & Funding Structure", s_section))
         story.append(sec_rule())
-        story.append(styled_table_gh(capex_data,[W*0.50,W*0.27,W*0.23]))
+        capex_gh = [["Component","$","% of Total"],
+            ["Structure/Cladding", f"${gh_r['structure_capex']:,.0f}",  f"{gh_r['structure_capex']/_capex*100:.1f}%" if _capex>0 else "—"],
+            ["Climate Control",    f"${gh_r['climate_capex']:,.0f}",    f"{gh_r['climate_capex']/_capex*100:.1f}%" if _capex>0 else "—"],
+            ["Irrigation/Hydro",   f"${gh_r['irrigation_capex']:,.0f}", f"{gh_r['irrigation_capex']/_capex*100:.1f}%" if _capex>0 else "—"],
+            ["Lighting (Suppl.)",  f"${gh_r['lighting_capex']:,.0f}",   f"{gh_r['lighting_capex']/_capex*100:.1f}%" if _capex>0 else "—"],
+            ["Automation",         f"${gh_r['automation_capex']:,.0f}", f"{gh_r['automation_capex']/_capex*100:.1f}%" if _capex>0 else "—"],
+            ["Real Estate",        f"${gh_r['real_estate_capex']:,.0f}",f"{gh_r['real_estate_capex']/_capex*100:.1f}%" if _capex>0 else "—"],
+            ["TOTAL",              f"${_capex:,.0f}",                    "100%"],
+        ]
+        capex_fund = [["Funding Structure","$",""],
+            ["Equity (own funds)",  f"${_equity:,.0f}", f"{(1-gh_inputs.get('ltv',0)/100)*100:.0f}%"],
+            ["Debt (loan)",         f"${_debt:,.0f}",   f"{gh_inputs.get('ltv',0):.0f}%"],
+            ["LTV",                 f"{gh_inputs.get('ltv',0):.0f}%", "—"],
+            ["Interest Rate",       f"{gh_inputs.get('interest_rate',0):.1f}%", "—"],
+            ["Loan Term",           f"{gh_inputs.get('loan_term_years',0)} yrs", "—"],
+            ["Annual Debt Service", f"${_ds:,.0f}" if _ds else "N/A", "—"],
+            ["DSCR",                dscr_str, "—"],
+        ]
+        cw = W/2 - 0.1*cm
+        cap_side = Table(
+            [[styled_tbl(capex_gh,  [cw*0.56,cw*0.24,cw*0.20], highlight_rows=[len(capex_gh)-1]),
+              styled_tbl(capex_fund,[cw*0.56,cw*0.24,cw*0.20], highlight_rows=[len(capex_fund)-1])]],
+            colWidths=[cw, cw])
+        cap_side.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(1,0),(-1,-1),6)]))
+        story.append(cap_side)
 
+        # PAGE 3 — Break-even + Scenarios
         story.append(PageBreak())
-        story.append(Paragraph("Investment Returns & Farm Configuration", s_title))
+        story.append(Paragraph("Break-Even Analysis & Price Scenarios", s_title))
         story.append(grn_rule())
+
+        story.append(Paragraph("Break-Even Analysis", s_section))
+        story.append(sec_rule())
+        be_data = [["Metric","Value","Note"],
+            ["Annual Production",      f"{_kg:,.0f} kg/yr", "—"],
+            ["Current Realised Price", f"${_price:.2f}/kg", gh_inputs.get("price_scenario","base").title()+" scenario"],
+            ["Break-Even Price",       f"${_be_price:.2f}/kg" if _be_price else "N/A", "Total costs ÷ annual production"],
+            ["Price Headroom / Gap",
+             (f"+{_price_hdroom:.0f}% above B/E" if _price_hdroom and _price_hdroom>0
+              else f"{_price_hdroom:.0f}% below B/E" if _price_hdroom else "N/A"),
+             "Positive = viable at current price"],
+            ["Break-Even Yield",       f"{_be_yield:.2f} kg/m²/cycle" if _be_yield else "N/A",
+             "Min yield to cover all costs"],
+            ["Total Annual Costs",     f"${_costs:,.0f}", "—"],
+            ["EBITDA",                 f"${_ebitda:,.0f} ({gh_r['ebitda_margin']*100:.1f}%)", "—"],
+            ["Energy Intensity",       f"${gh_r['annual_energy_cost']/_kg:.2f}/kg" if _kg>0 else "—",
+             "Energy cost per kg"],
+            ["Labour Cost/kg",         f"${gh_r['annual_labour_cost']/_kg:.2f}/kg" if _kg>0 else "—", "—"],
+            ["Revenue per m²",         f"${_rev/(int(gh_inputs.get('footprint',1)) or 1):,.0f}/m²/yr", "—"],
+        ]
+        story.append(styled_tbl(be_data, [W*0.35, W*0.28, W*0.37], highlight_rows=[3]))
+        story.append(Spacer(1,0.4*cm))
+        story.append(Paragraph("Price Sensitivity — Three Scenarios", s_section))
+        story.append(sec_rule())
+        story.append(chart_flow(fig_scen, 17, 6, 1000, 350))
+        scen_tbl = [["Scenario","Revenue","EBITDA","Margin","vs Base"],
+            [_scen_names[0],f"${_scen_rev[0]:,.0f}",f"${_scen_ebitda[0]:,.0f}",f"{_scen_margin[0]:.1f}%",f"${_scen_ebitda[0]-_ebitda:,.0f}"],
+            [_scen_names[1],f"${_scen_rev[1]:,.0f}",f"${_scen_ebitda[1]:,.0f}",f"{_scen_margin[1]:.1f}%","— (base)"],
+            [_scen_names[2],f"${_scen_rev[2]:,.0f}",f"${_scen_ebitda[2]:,.0f}",f"{_scen_margin[2]:.1f}%",f"+${_scen_ebitda[2]-_ebitda:,.0f}"],
+        ]
+        story.append(styled_tbl(scen_tbl, [W*0.28,W*0.18,W*0.18,W*0.18,W*0.18],
+            highlight_rows=[2], highlight_color=colors.HexColor("#e3f2fd")))
+
+        # PAGE 4 — Tornado + DCF
+        story.append(PageBreak())
+        story.append(Paragraph("Sensitivity Analysis & Investment Returns", s_title))
+        story.append(grn_rule())
+        story.append(Paragraph("Key Driver Sensitivity — EBITDA Tornado", s_section))
+        story.append(sec_rule())
+        story.append(Paragraph(
+            "Each bar shows the EBITDA impact when one variable is stressed independently, "
+            "all others held at base.", s_note))
+        story.append(chart_flow(fig_torn, 17, 6, 1000, 330))
+        story.append(Spacer(1,0.2*cm))
+        torn_tbl = [["Driver","Pessimistic","EBITDA Δ","Optimistic","EBITDA Δ"]]
+        for _tv in _tvars:
+            torn_tbl.append([_tv["label"], _tv["pess_label"], f"${_tv['delta_pess']:,.0f}",
+                _tv["opt_label"],
+                f"+${_tv['delta_opt']:,.0f}" if _tv["delta_opt"]>0 else f"${_tv['delta_opt']:,.0f}"])
+        story.append(styled_tbl(torn_tbl, [W*0.18,W*0.22,W*0.14,W*0.22,W*0.24]))
+        story.append(Spacer(1,0.4*cm))
         story.append(Paragraph("10-Year Cumulative NPV", s_section))
         story.append(sec_rule())
-        story.append(chart_flowable_gh(fig_gh_dcf, 17, 7, 1000, 420))
-        story.append(Spacer(1,0.4*cm))
-
+        story.append(chart_flow(fig_dcf, 17, 7, 1000, 420))
+        story.append(Spacer(1,0.3*cm))
         dcf_data = [["Year","FCFE ($)","PV ($)","Cumulative NPV ($)"]]
-        for d in gh_r["dcf_cashflows"]:
+        for d in _dcf:
             dcf_data.append([str(d["year"]),f"${d['fcfe']:,.0f}",f"${d['pv']:,.0f}",f"${d['cumulative_npv']:,.0f}"])
         story.append(Paragraph("DCF Cash Flow Detail", s_section))
         story.append(sec_rule())
-        story.append(styled_table_gh(dcf_data,[W*0.10,W*0.28,W*0.28,W*0.34]))
-        story.append(Spacer(1,0.5*cm))
+        story.append(styled_tbl(dcf_data, [W*0.10,W*0.28,W*0.28,W*0.34]))
 
-        params_data = [["Parameter","Value","Parameter","Value"],
-            ["Country",       gh_inputs["country"],                   "Crop",          gh_inputs["crop"]],
-            ["Footprint",     f"{int(gh_inputs['footprint']):,} m²",  "Crop Source",   gh_inputs.get("crop_source","—").title()],
-            ["Structure",     gh_r["structure_type"],                 "Automation",    gh_inputs["automation"]],
-            ["Price Scenario",gh_inputs["price_scenario"],            "Selling Price", f"${gh_r['effective_price']:.2f}/kg"],
-            ["Cycles/Year",   str(gh_r["cycles_per_year"]),           "Annual Output", f"{gh_r['total_annual_kg']:,.0f} kg"],
-            ["Loss Rate",     f"{gh_inputs['loss_rate']}%",           "Net Grow Factor",f"{gh_inputs['net_grow_factor']}%"],
-            ["LTV",           f"{gh_inputs['ltv']}%",                 "Interest Rate", f"{gh_inputs['interest_rate']}%"],
-            ["Depreciation",  f"{gh_inputs['depreciation_years']} yrs","Tax Rate",     f"{gh_inputs['tax_rate']}%"],
-            ["Loan Term",     f"{gh_inputs['loan_term_years']} yrs",  "Discount Rate", f"{gh_inputs['discount_rate']}%"],
-        ]
-        story.append(Paragraph("Farm Configuration", s_section))
+        # PAGE 5 — Config + Production + Risk + Methodology
+        story.append(PageBreak())
+        story.append(Paragraph("System Configuration & Risk Factors", s_title))
+        story.append(grn_rule())
+        story.append(Paragraph("System Configuration", s_section))
         story.append(sec_rule())
-        story.append(styled_table_gh(params_data,[W/4]*4))
+        params_data = [["Parameter","Value","Parameter","Value"],
+            ["Country",          gh_inputs["country"],                    "Crop",           gh_inputs["crop"]],
+            ["Footprint",        f"{int(gh_inputs['footprint']):,} m²",  "Crop Source",    gh_inputs.get("crop_source","—").title()],
+            ["Structure Type",   gh_r.get("structure_type","—"),          "Automation",     gh_inputs["automation"]],
+            ["Effective Grow",   f"{gh_r['effective_grow_area']:,.0f} m²","Net Grow Factor",f"{gh_inputs.get('net_grow_factor',85)}%"],
+            ["Harvest Mode",     gh_inputs.get("harvest_mode","—"),       "Price Scenario", gh_inputs["price_scenario"]],
+            ["Selling Price",    f"${_price:.2f}/kg",                     "Cycles/Year",    str(gh_r["cycles_per_year"])],
+            ["Annual Output",    f"{_kg:,.0f} kg",                        "Loss Rate",      f"{gh_inputs.get('loss_rate',5):.1f}%"],
+            ["LTV",              f"{gh_inputs.get('ltv',0):.0f}%",        "Interest Rate",  f"{gh_inputs.get('interest_rate',0):.1f}%"],
+            ["Loan Term",        f"{gh_inputs.get('loan_term_years',0)} yrs","Discount Rate",f"{gh_inputs.get('discount_rate',10):.1f}%"],
+            ["Depreciation",     f"{gh_inputs.get('depreciation_years',0)} yrs","Tax Rate", f"{gh_inputs.get('tax_rate',0):.1f}%"],
+            ["Packaging Cost",   f"${gh_inputs.get('packaging_cost',0.25):.2f}/kg","Water Price",f"${gh_inputs.get('water_price',0):.2f}/m³"],
+        ]
+        story.append(styled_tbl(params_data, [W/4]*4))
+        story.append(Spacer(1,0.4*cm))
 
-        story.append(Spacer(1,0.8*cm))
-        story.append(HRFlowable(width="100%",thickness=0.5,color=colors.HexColor("#cccccc"),spaceAfter=4))
+        story.append(Paragraph("Production & Efficiency Metrics", s_section))
+        story.append(sec_rule())
+        _fp = int(gh_inputs.get("footprint",1)) or 1
+        _ea = gh_r.get("effective_grow_area", _fp)
+        prod_data = [["Metric","Value","Benchmark","Note"],
+            ["Annual Production",       f"{_kg:,.0f} kg/yr",           "—", "—"],
+            ["Yield per m² (gross)",    f"{_kg/_fp:.1f} kg/m²/yr",     "GH: 30–150 kg/m²/yr", "Gross footprint"],
+            ["Yield per m² (net grow)", f"{_kg/_ea:.1f} kg/m²/yr" if _ea>0 else "—", "—", "Net growing area"],
+            ["Revenue per m²",          f"${_rev/_fp:,.0f}/m²/yr",     "—", "Gross footprint"],
+            ["Energy Intensity",        f"${gh_r['annual_energy_cost']/_kg:.2f}/kg" if _kg>0 else "—",
+             "GH: $0.10–0.80/kg", "Energy cost per kg"],
+            ["Labour Cost/kg",          f"${gh_r['annual_labour_cost']/_kg:.2f}/kg" if _kg>0 else "—", "—", "—"],
+            ["Energy kWh/kg",           f"{gh_r.get('annual_kwh',0)/_kg:.1f} kWh/kg" if _kg>0 else "—",
+             "GH benchmark: 2–8 kWh/kg", "—"],
+        ]
+        story.append(styled_tbl(prod_data, [W*0.30,W*0.20,W*0.25,W*0.25]))
+        story.append(Spacer(1,0.4*cm))
+
+        story.append(Paragraph("Key Risk Factors", s_section))
+        story.append(sec_rule())
+        _risks = []
+        if _dscr and _dscr < 1.0:
+            _risks.append(["HIGH","Debt Coverage",
+                f"DSCR {_dscr:.2f}x — EBITDA insufficient to service debt at {gh_inputs.get('ltv',0):.0f}% LTV."])
+        elif _dscr and _dscr < 1.25:
+            _risks.append(["MEDIUM","Debt Coverage",
+                f"DSCR {_dscr:.2f}x — below standard 1.25x minimum."])
+        if _energy_pct > 40:
+            _risks.append(["HIGH","Energy Viability",
+                f"Energy = {_energy_pct:.1f}% of revenue, above structural viability threshold."])
+        elif _energy_pct > 20:
+            _risks.append(["MEDIUM","Energy Exposure",
+                f"Energy = {_energy_pct:.1f}% of revenue. Sensitivity to energy price volatility is meaningful."])
+        if _price_hdroom is not None and _price_hdroom < 10:
+            _risks.append(["MEDIUM","Price Sensitivity",
+                f"{abs(_price_hdroom):.0f}% headroom above break-even at ${_be_price:.2f}/kg."])
+        _risks += [
+            ["LOW","Crop Biology","Greenhouse reduces but does not eliminate biological risk. "
+             "Disease, pest, and climate failure scenarios not modelled."],
+            ["LOW","Market Volatility","Wholesale prices can deviate significantly from scenario assumptions."],
+            ["LOW","Climate / Energy","Heating and cooling costs are climate-sensitive. Unusual weather years "
+             "can materially increase OPEX above modelled levels."],
+            ["LOW","Labour Availability","Skilled greenhouse labour may be scarce in some geographies."],
+        ]
+        risk_t = Table([["Severity","Risk Factor","Description"]] + _risks,
+                       colWidths=[W*0.12, W*0.24, W*0.64], repeatRows=1)
+        risk_ts = [
+            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),
+            ("BACKGROUND",(0,0),(-1,0),DARK_BG),("TEXTCOLOR",(0,0),(-1,0),GREEN),
+            ("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#dddddd")),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+            ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+            ("VALIGN",(0,0),(-1,-1),"TOP"),("FONTNAME",(0,1),(-1,-1),"Helvetica"),
+            ("TEXTCOLOR",(0,1),(-1,-1),DARK_BG),
+        ]
+        for i, rx in enumerate(_risks, start=1):
+            if rx[0]=="HIGH":
+                risk_ts += [("TEXTCOLOR",(0,i),(0,i),RED_COL),("FONTNAME",(0,i),(0,i),"Helvetica-Bold")]
+            elif rx[0]=="MEDIUM":
+                risk_ts += [("TEXTCOLOR",(0,i),(0,i),AMBER),("FONTNAME",(0,i),(0,i),"Helvetica-Bold")]
+            else:
+                risk_ts.append(("TEXTCOLOR",(0,i),(0,i),MID_GREY))
+            if i%2==1:
+                risk_ts.append(("BACKGROUND",(1,i),(-1,i),LIGHT_ROW))
+        risk_t.setStyle(TableStyle(risk_ts))
+        story.append(risk_t)
+
+        story.append(Spacer(1,0.5*cm))
+        story.append(Paragraph("Methodology & Assumptions", s_section))
+        story.append(sec_rule())
         story.append(Paragraph(
-            f"Agricultural Intelligence Portal &nbsp;·&nbsp; CEA Feasibility Report &nbsp;·&nbsp; "
-            f"For indicative purposes only. Not investment advice. &nbsp;·&nbsp; {report_date}", s_footer))
+            "This report is generated by the Agricultural Intelligence Portal CEA financial model. "
+            f"{_modality_label} P&L uses a solar-driven greenhouse model with country-specific climate, "
+            "energy, labour, and water pricing. CAPEX is based on industry benchmarks scaled to footprint. "
+            f"DCF analysis uses FCFE discounted at {gh_inputs.get('discount_rate',10):.1f}%. "
+            "Break-even prices are total annual costs divided by annual production. "
+            "Sensitivity analysis stresses variables independently at base. "
+            "Results are indicative and should be validated with site-specific engineering "
+            "and market studies before investment decisions.", s_note))
+
+        story.append(Spacer(1,0.4*cm))
+        story.append(HRFlowable(width="100%",thickness=0.5,color=colors.HexColor("#cccccc"),spaceAfter=4))
+        story.append(footer_para())
 
         doc.build(story)
         buffer.seek(0)
         return buffer.read()
+
 
     gh_pdf_col1, gh_pdf_col2 = st.columns([5, 1])
     with gh_pdf_col2:
