@@ -45,9 +45,88 @@ def _render_farm_selector_sidebar():
     Sets st.session_state["active_farm"] and triggers st.rerun() on load.
     Returns the active farm dict or None.
     """
-    
+    with st.sidebar:
+        st.markdown("### 🌱 Active Farm")
+        try:
+            _resp = supabase.table("farms").select(
+                "id, name, modality, country, crop, footprint, levels, lights_tier, hvac, "
+                "automation, price_scenario, price_override, packaging_cost, loss_rate, "
+                "net_grow_factor, walkways_factor, water_price, rent_monthly, real_estate_capex, "
+                "harvest_mode, depreciation_years, tax_rate, ltv, interest_rate, loan_term_years, "
+                "lat, lon, crop_mix_json, ambient_temp_annual, mean_annual_dli, crop_source, discount_rate"
+            ).order("created_at", desc=True).execute()
+            _farms_list = _resp.data or []
+        except Exception:
+            _farms_list = []
+
+        _active = st.session_state.get("active_farm")
+        _active_name = _active["name"] if _active else None
+
+        if _active:
+            _mod_badge = {
+                "vertical_farm": "🏭",
+                "greenhouse": "🌿",
+                "polytunnel": "🌿",
+                "aquaponics_decoupled": "🐟",
+                "aquaponics_coupled": "♻️",
+            }.get(_active.get("modality", ""), "🌱")
+            st.success(f"{_mod_badge} **{_active['name']}**")
+            if _active.get("country"):
+                st.caption(f"📍 {_active['country']}")
+        else:
+            st.info("No farm loaded. Select or create one below.")
+
+        _farm_names = ["— select —"] + [f["name"] for f in _farms_list]
+        _sel = st.selectbox(
+            "Load farm",
+            options=_farm_names,
+            index=_farm_names.index(_active_name) if _active_name in _farm_names else 0,
+            key="global_farm_selector",
+        )
+
+        if _sel != "— select —":
+            _farm = next((f for f in _farms_list if f["name"] == _sel), None)
+            if _farm and (not _active or _active.get("name") != _sel):
+                if st.button("⬇️ Load", use_container_width=True, key="global_farm_load_btn"):
+                    st.session_state["active_farm"]        = _farm
+                    st.session_state["_pending_farm_load"] = _farm
+                    st.session_state["gh_country"]         = _farm.get("country", "Germany")
+                    st.session_state["gh_footprint"]       = int(_farm.get("footprint") or 5000)
+                    st.session_state["gh_automation"]      = _farm.get("automation", "Medium")
+                    _sl_gh_src = ("Polytunnel" if (_farm.get("crop_source") or "greenhouse").lower() == "polytunnel" else "Greenhouse")
+                    st.session_state["gh_crop_source"]     = _sl_gh_src
+                    _sl_gh_dict = POLYTUNNEL_CROPS if _sl_gh_src == "Polytunnel" else GREENHOUSE_CROPS
+                    _sl_gh_crop = _farm.get("crop", "")
+                    st.session_state["gh_crop"]            = _sl_gh_crop if _sl_gh_crop in _sl_gh_dict else list(_sl_gh_dict.keys())[0]
+                    st.session_state["aq_country"]         = _farm.get("country", "Germany")
+                    st.session_state["aq_plant_crop"]      = _farm.get("crop", "Lettuce (Butterhead)")
+                    if _farm.get("lat") and _farm.get("lon"):
+                        st.session_state["shared_lat"] = _farm["lat"]
+                        st.session_state["shared_lng"] = _farm["lon"]
+                        st.session_state["fim_lat"]    = _farm["lat"]
+                        st.session_state["fim_lng"]    = _farm["lon"]
+                    _mod = _farm.get("modality", "vertical_farm")
+                    _mod_map = {
+                        "vertical_farm":        "🏭 Indoor Vertical Farm",
+                        "greenhouse":           "🌿 High-Tech Greenhouse",
+                        "polytunnel":           "🌿 High-Tech Greenhouse",
+                        "aquaponics_decoupled": "🐟 Decoupled Aquaponics",
+                        "aquaponics_coupled":   "♻️ Coupled Aquaponics",
+                    }
+                    st.session_state["_pending_modality"] = _mod_map.get(_mod, "🏭 Indoor Vertical Farm")
+                    st.rerun()
+
+        if _active:
+            if st.button("✖ Clear farm", use_container_width=True, key="global_farm_clear_btn"):
+                st.session_state.pop("active_farm", None)
+                st.rerun()
+
+        st.divider()
+        return st.session_state.get("active_farm")
+
+
 # ═══════════════════════════════════════════════════════════════
-# UNIFIED PDF ENGINE
+# UNIFIED PDF ENGINE — all modalities
 # ═══════════════════════════════════════════════════════════════
 # ─────────────────────────────────────────────────────────────────────────────
 # UNIFIED PDF ENGINE — all modalities
@@ -1101,85 +1180,6 @@ def _build_feasibility_pdf(result_dict: dict, inputs_dict: dict, modality: str,
     return buf.getvalue()
 
 
-
-with st.sidebar:
-        st.markdown("### 🌱 Active Farm")
-        try:
-            _resp = supabase.table("farms").select(
-                "id, name, modality, country, crop, footprint, levels, lights_tier, hvac, "
-                "automation, price_scenario, price_override, packaging_cost, loss_rate, "
-                "net_grow_factor, walkways_factor, water_price, rent_monthly, real_estate_capex, "
-                "harvest_mode, depreciation_years, tax_rate, ltv, interest_rate, loan_term_years, "
-                "lat, lon, crop_mix_json, ambient_temp_annual, mean_annual_dli, crop_source, discount_rate"
-            ).order("created_at", desc=True).execute()
-            _farms_list = _resp.data or []
-        except Exception:
-            _farms_list = []
-
-        _active = st.session_state.get("active_farm")
-        _active_name = _active["name"] if _active else None
-
-        if _active:
-            _mod_badge = {
-                "vertical_farm": "🏭",
-                "greenhouse": "🌿",
-                "polytunnel": "🌿",
-                "aquaponics_decoupled": "🐟",
-                "aquaponics_coupled": "♻️",
-            }.get(_active.get("modality", ""), "🌱")
-            st.success(f"{_mod_badge} **{_active['name']}**")
-            if _active.get("country"):
-                st.caption(f"📍 {_active['country']}")
-        else:
-            st.info("No farm loaded. Select or create one below.")
-
-        _farm_names = ["— select —"] + [f["name"] for f in _farms_list]
-        _sel = st.selectbox(
-            "Load farm",
-            options=_farm_names,
-            index=_farm_names.index(_active_name) if _active_name in _farm_names else 0,
-            key="global_farm_selector",
-        )
-
-        if _sel != "— select —":
-            _farm = next((f for f in _farms_list if f["name"] == _sel), None)
-            if _farm and (not _active or _active.get("name") != _sel):
-                if st.button("⬇️ Load", use_container_width=True, key="global_farm_load_btn"):
-                    st.session_state["active_farm"]        = _farm
-                    st.session_state["_pending_farm_load"] = _farm
-                    st.session_state["gh_country"]         = _farm.get("country", "Germany")
-                    st.session_state["gh_footprint"]       = int(_farm.get("footprint") or 5000)
-                    st.session_state["gh_automation"]      = _farm.get("automation", "Medium")
-                    _sl_gh_src = ("Polytunnel" if (_farm.get("crop_source") or "greenhouse").lower() == "polytunnel" else "Greenhouse")
-                    st.session_state["gh_crop_source"]     = _sl_gh_src
-                    _sl_gh_dict = POLYTUNNEL_CROPS if _sl_gh_src == "Polytunnel" else GREENHOUSE_CROPS
-                    _sl_gh_crop = _farm.get("crop", "")
-                    st.session_state["gh_crop"]            = _sl_gh_crop if _sl_gh_crop in _sl_gh_dict else list(_sl_gh_dict.keys())[0]
-                    st.session_state["aq_country"]         = _farm.get("country", "Germany")
-                    st.session_state["aq_plant_crop"]      = _farm.get("crop", "Lettuce (Butterhead)")
-                    if _farm.get("lat") and _farm.get("lon"):
-                        st.session_state["shared_lat"] = _farm["lat"]
-                        st.session_state["shared_lng"] = _farm["lon"]
-                        st.session_state["fim_lat"]    = _farm["lat"]
-                        st.session_state["fim_lng"]    = _farm["lon"]
-                    _mod = _farm.get("modality", "vertical_farm")
-                    _mod_map = {
-                        "vertical_farm":        "🏭 Indoor Vertical Farm",
-                        "greenhouse":           "🌿 High-Tech Greenhouse",
-                        "polytunnel":           "🌿 High-Tech Greenhouse",
-                        "aquaponics_decoupled": "🐟 Decoupled Aquaponics",
-                        "aquaponics_coupled":   "♻️ Coupled Aquaponics",
-                    }
-                    st.session_state["_pending_modality"] = _mod_map.get(_mod, "🏭 Indoor Vertical Farm")
-                    st.rerun()
-
-        if _active:
-            if st.button("✖ Clear farm", use_container_width=True, key="global_farm_clear_btn"):
-                st.session_state.pop("active_farm", None)
-                st.rerun()
-
-        st.divider()
-        return st.session_state.get("active_farm")
 
 if "show_save_farm_form" not in st.session_state:
     st.session_state["show_save_farm_form"] = False
