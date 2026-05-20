@@ -3342,5 +3342,3 @@ elif active_farm:
         "☀️ Solar analysis requires farm coordinates. "
         "Add lat/lon to the farm profile in the ROI Calculator to enable this panel."
     )
-        "Add lat/lon to the farm profile in the ROI Calculator to enable this panel."
-    )
