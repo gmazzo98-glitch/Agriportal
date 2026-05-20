@@ -373,6 +373,35 @@ def compute_logistics_score(df: pd.DataFrame) -> tuple[int, dict]:
             breakdown[infra_type] = weight
     return min(score, 100), breakdown
 
+def compute_nearest_by_category(df: pd.DataFrame) -> list[dict]:
+    """Computes the nearest instance for a set of priority infrastructure categories."""
+    if df.empty:
+        return []
+
+    priority_categories = [
+        {"label": "✈️ Airport", "types": ["Airport", "Airport Terminal"]},
+        {"label": "⚓ Port / Harbour", "types": ["Commercial Port", "Harbour / Port"]},
+        {"label": "🛣️ Motorway Access", "types": ["Motorway Junction", "Motorway"]},
+        {"label": "🚂 Rail", "types": ["Rail Freight Terminal", "Rail Station"]},
+        {"label": "❄️ Cold Storage", "types": ["Cold Storage"]},
+        {"label": "⛽ Fuel Station", "types": ["Fuel Station (HGV)"]},
+        {"label": "⛴️ Ferry", "types": ["Ferry Terminal"]},
+    ]
+
+    results = []
+    for category in priority_categories:
+        subset = df[df["Type"].isin(category["types"])]
+        if not subset.empty:
+            nearest = subset.iloc[subset["Distance (km)"].idxmin()]
+            results.append({
+                "label": category["label"], "name": nearest["Name"],
+                "distance_km": nearest["Distance (km)"], "found": True,
+            })
+        else:
+            results.append({
+                "label": category["label"], "name": None, "distance_km": None, "found": False,
+            })
+    return results
 
 # ═════════════════════════════════════════════════════════════════════════════
 # [LAYER 3 PLACEHOLDER — Climate / Meteorological]
@@ -548,6 +577,19 @@ st.markdown(
 
 # ── Session state ─────────────────────────────────────────────────────────────
 
+# Check for active farm and sync coordinates if necessary
+_active_farm_init = st.session_state.get("active_farm")
+if _active_farm_init and _active_farm_init.get("lat") and _active_farm_init.get("lon"):
+    # If map coords are not set, or don't match the active farm, update them.
+    if (st.session_state.get("fim_lat") != _active_farm_init["lat"] or
+        st.session_state.get("fim_lng") != _active_farm_init["lon"]):
+        st.session_state["fim_lat"] = _active_farm_init["lat"]
+        st.session_state["fim_lng"] = _active_farm_init["lon"]
+        # Clear cached results as the location has changed
+        st.session_state["fim_waste_df"]     = None
+        st.session_state["fim_logistics_df"] = None
+
+# Fallback for first load without an active farm
 if "fim_lat" not in st.session_state:
     if "shared_lat" in st.session_state:
         st.session_state["fim_lat"] = st.session_state["shared_lat"]
@@ -564,6 +606,8 @@ for key, default in [
     ("fim_lm_overwrite_confirmed", False),
     ("fim_waste_df",        None),
     ("fim_logistics_df",    None),
+    ("fim_suitability_active", False),
+    ("fim_suitability_count",  2),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -653,12 +697,6 @@ with st.sidebar:
         st.markdown(f"**🏭 Active farm:** {_active_farm['name']}")
         if _active_farm.get("lat") and _active_farm.get("lon"):
             st.caption(f"📍 `{_active_farm['lat']:.4f}, {_active_farm['lon']:.4f}`")
-            if st.button("📍 Jump to farm location", use_container_width=True):
-                st.session_state["fim_lat"]          = _active_farm["lat"]
-                st.session_state["fim_lng"]          = _active_farm["lon"]
-                st.session_state["fim_waste_df"]     = None
-                st.session_state["fim_logistics_df"] = None
-                st.rerun()
         else:
             st.caption("No coordinates saved for this farm yet.")
 
@@ -710,6 +748,28 @@ with st.sidebar:
     search_clicked = st.button("🔍 Search All Active Layers", use_container_width=True)
     st.caption("**Data:** OpenStreetMap contributors via Overpass API.")
 
+    with st.expander("📍 Location Suitability Finder", expanded=False):
+        st.caption(
+            "Define up to 3 reference points and maximum distances. "
+            "The map will show their coverage circles — the overlap is your optimal zone."
+        )
+        st.number_input(
+            "Number of reference points", min_value=1, max_value=3, value=2, step=1,
+            key="fim_suitability_count"
+        )
+        for i in range(st.session_state.get("fim_suitability_count", 2)):
+            st.markdown(f"**Reference point {i+1}**")
+            st.text_input("Label", key=f"fim_suit_label_{i}",
+                          placeholder="e.g. Motorway Junction")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.number_input("Latitude", key=f"fim_suit_lat_{i}", format="%.4f", step=0.001, value=0.0)
+            with c2:
+                st.number_input("Longitude", key=f"fim_suit_lng_{i}", format="%.4f", step=0.001, value=0.0)
+            st.slider("Max distance (km)", min_value=1, max_value=100, value=20, step=1, key=f"fim_suit_radius_{i}")
+            st.caption("Tip: run a search first, then copy coordinates from the results table.")
+        st.checkbox("Show suitability circles on map", value=False, key="fim_suitability_active")
+
 # ── Map (always visible) ──────────────────────────────────────────────────────
 
 st.subheader("📍 Intelligence Map")
@@ -753,6 +813,33 @@ folium.Circle(
     location=[lat, lng], radius=radius_m,
     color="#00e5a0", weight=1.5, fill=True, fill_opacity=0.04,
 ).add_to(m)
+
+# Suitability circles overlay
+if st.session_state.get("fim_suitability_active", False):
+    _suit_colors = ["#FF6B6B", "#FFD93D", "#6BCB77"]
+    _suit_count  = st.session_state.get("fim_suitability_count", 2)
+    for _i in range(_suit_count):
+        _slat = st.session_state.get(f"fim_suit_lat_{_i}", 0.0)
+        _slng = st.session_state.get(f"fim_suit_lng_{_i}", 0.0)
+        _srad = st.session_state.get(f"fim_suit_radius_{_i}", 20) * 1000
+        _slbl = st.session_state.get(f"fim_suit_label_{_i}", f"Reference {_i+1}") or f"Reference {_i+1}"
+        _scol = _suit_colors[_i % len(_suit_colors)]
+        if _slat != 0.0 or _slng != 0.0:
+            folium.Circle(
+                location=[_slat, _slng],
+                radius=_srad,
+                color=_scol,
+                weight=2,
+                fill=True,
+                fill_opacity=0.08,
+                dash_array="4",
+                tooltip=f"Suitability zone: {_slbl} (≤ {_srad//1000} km)",
+            ).add_to(m)
+            folium.Marker(
+                location=[_slat, _slng],
+                tooltip=f"📌 {_slbl}",
+                icon=folium.Icon(color="red" if _i==0 else ("orange" if _i==1 else "green"), icon="map-pin", prefix="fa"),
+            ).add_to(m)
 
 # Active farm pin — shown as a flag marker distinct from the search origin
 _active_farm_map = st.session_state.get("active_farm")
@@ -999,6 +1086,27 @@ if layer_logistics and logistics_cached is not None:
                 </div></div>""",
                 unsafe_allow_html=True,
             )
+
+            st.caption("📍 Nearest key infrastructure from current origin")
+            nearest_infra = compute_nearest_by_category(logistics_cached)
+            if nearest_infra:
+                cols = st.columns(7)
+                for i, item in enumerate(nearest_infra):
+                    with cols[i]:
+                        st.markdown(f"**{item['label']}**")
+                        if item['found']:
+                            name_trunc = (item['name'][:20] + '…') if len(item['name']) > 20 else item['name']
+                            st.markdown(
+                                f"<div style='color:#00e5a0; font-weight:600;'>{item['distance_km']:.1f} km</div>"
+                                f"<div style='font-size:11px; color:#8892a0;'>{name_trunc}</div>",
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.markdown(
+                                f"<div style='color:#696969; font-weight:600;'>—</div>"
+                                f"<div style='font-size:11px; color:#696969;'>Not found</div>",
+                                unsafe_allow_html=True
+                            )
 
             st.divider()
             display_cols   = ["Name", "Type", "Distance (km)", "Address"]
