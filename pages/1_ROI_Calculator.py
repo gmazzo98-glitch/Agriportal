@@ -2321,8 +2321,8 @@ if modality == "🏭 Indoor Vertical Farm":
         "Value": [
             f"{r['effective_grow_area']:,.0f}",
             f"{r['gross_area']:,.0f}",
-            r["cycles_per_year"],
-            r["effective_cycle_days"],
+            str(r["cycles_per_year"]),
+            str(r["effective_cycle_days"]),
             r["harvest_mode"],
             f"{r['total_annual_kg']:,.0f}",
             f"${r['effective_price']:.2f}",
@@ -3504,7 +3504,7 @@ elif modality == "🌿 High-Tech Greenhouse":
             f"{gh_r['effective_grow_area']:,.0f}",
             f"{gh_r['gross_area']:,.0f}",
             gh_r["structure_type"],
-            gh_r["cycles_per_year"],
+            str(gh_r["cycles_per_year"]),
             gh_r["harvest_mode"],
             f"{gh_r['total_annual_kg']:,.0f}",
             f"${gh_r['effective_price']:.2f}",
@@ -4082,6 +4082,69 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         st.warning("⚠️ Fix plant crop allocation (must sum to 100%) before results are shown.")
         st.stop()
 
+    # Define plant-side crop dictionary for sensitivity analysis
+    _aq_plant_dict = POLYTUNNEL_CROPS if aq_inputs.get("plant_crop_source") == "polytunnel" else GREENHOUSE_CROPS
+
+    # Define plant-side inputs for sensitivity analysis
+    _aq_plant_sens_inputs = {
+        "country": aq_inputs["country"], "crop": aq_inputs["plant_crop"],
+        "crop_source": aq_inputs.get("plant_crop_source","greenhouse"),
+        "footprint": aq_inputs["plant_footprint"],
+        "automation": aq_inputs["automation"],
+        "price_scenario": aq_inputs["price_scenario"], "price_override": 0.0,
+        "packaging_cost": aq_inputs["packaging_cost"],
+        "loss_rate": aq_inputs["loss_rate"],
+        "net_grow_factor": aq_inputs["net_grow_factor"],
+        "walkways_factor": aq_inputs["walkways_factor"],
+        "water_price": aq_inputs["water_price"],
+        "rent_monthly": aq_inputs["rent_monthly"],
+        "real_estate_capex": aq_inputs["real_estate_capex"],
+        "harvest_mode": aq_inputs["harvest_mode"],
+        "depreciation_years": aq_inputs["depreciation_years"],
+        "tax_rate": aq_inputs["tax_rate"], "ltv": aq_inputs["ltv"],
+        "interest_rate": aq_inputs["interest_rate"],
+        "loan_term_years": aq_inputs["loan_term_years"],
+        "discount_rate": aq_inputs["discount_rate"],
+    }
+
+    # Define sensitivity run helper function
+    def _aq_run_mult(base_plant_inputs, kwh_m=1.0, lab_m=1.0, yld_m=1.0, prc_m=1.0):
+        import core.greenhouse_data_tables as _ghdt
+        import copy as _copy
+        import core.data_tables as _cdt
+        _cn = base_plant_inputs["country"]
+        _orig_c = _cdt.COUNTRIES[_cn]
+        _mod_c  = _copy.deepcopy(_orig_c)
+        _mod_c["kwh"]    = _orig_c["kwh"]    * kwh_m
+        _mod_c["labour"] = _orig_c["labour"] * lab_m
+        _mod_i = _copy.deepcopy(base_plant_inputs)
+        _src   = base_plant_inputs.get("crop_source","greenhouse")
+        _cd    = _ghdt.POLYTUNNEL_CROPS if _src=="polytunnel" else _ghdt.GREENHOUSE_CROPS
+        if prc_m != 1.0 or yld_m != 1.0:
+            _orig_crop = _cd[base_plant_inputs["crop"]]
+            _mod_crop  = _copy.deepcopy(_orig_crop)
+            _mod_crop["yield"]    = _orig_crop["yield"]    * yld_m
+            _mod_crop["yield_h2"] = _orig_crop["yield_h2"] * yld_m
+            _mod_crop["yield_h3"] = _orig_crop["yield_h3"] * yld_m
+            if base_plant_inputs.get("price_override",0)>0:
+                _mod_i["price_override"] = base_plant_inputs["price_override"] * prc_m
+            else:
+                _base_price = _orig_crop[f"price_{base_plant_inputs['price_scenario']}"]
+                _mod_i["price_override"] = _base_price * prc_m
+            _cd[base_plant_inputs["crop"]] = _mod_crop
+        _cdt.COUNTRIES[_cn] = _mod_c
+        try:
+            if _aq_mix_valid:
+                _res = _run_multicrop_generic(_mod_i, _aq_crop_mix,
+                                              calculate_greenhouse, _aq_plant_dict)
+            else:
+                _res = calculate_greenhouse(_mod_i)
+        finally:
+            _cdt.COUNTRIES[_cn] = _orig_c
+            if prc_m != 1.0 or yld_m != 1.0:
+                _cd[base_plant_inputs["crop"]] = _orig_crop
+        return _res
+
     if _aq_mix_valid:
         # Run plant side as multi-crop, fish side as single species
         _aq_plant_dict = POLYTUNNEL_CROPS if aq_inputs.get("plant_crop_source") == "polytunnel" else GREENHOUSE_CROPS
@@ -4551,62 +4614,6 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     # SENSITIVITY ANALYSIS (plant side)
     # ═══════════════════════════════════════════════════════════════════════════
     st.subheader("🔬 Plant Side Sensitivity Analysis")
-
-    def _aq_run_mult(base_plant_inputs, kwh_m=1.0, lab_m=1.0, yld_m=1.0, prc_m=1.0):
-        import core.greenhouse_data_tables as _ghdt
-        import copy as _copy
-        import core.data_tables as _cdt
-        _cn = base_plant_inputs["country"]
-        _orig_c = _cdt.COUNTRIES[_cn]
-        _mod_c  = _copy.deepcopy(_orig_c)
-        _mod_c["kwh"]    = _orig_c["kwh"]    * kwh_m
-        _mod_c["labour"] = _orig_c["labour"] * lab_m
-        _mod_i = _copy.deepcopy(base_plant_inputs)
-        _src   = base_plant_inputs.get("crop_source","greenhouse")
-        _cd    = _ghdt.POLYTUNNEL_CROPS if _src=="polytunnel" else _ghdt.GREENHOUSE_CROPS
-        if prc_m != 1.0 or yld_m != 1.0:
-            _orig_crop = _cd[base_plant_inputs["crop"]]
-            _mod_crop  = _copy.deepcopy(_orig_crop)
-            _mod_crop["yield"]    = _orig_crop["yield"]    * yld_m
-            _mod_crop["yield_h2"] = _orig_crop["yield_h2"] * yld_m
-            _mod_crop["yield_h3"] = _orig_crop["yield_h3"] * yld_m
-            if base_plant_inputs.get("price_override",0)>0:
-                _mod_i["price_override"] = base_plant_inputs["price_override"] * prc_m
-            else:
-                _base_price = _orig_crop[f"price_{base_plant_inputs['price_scenario']}"]
-                _mod_i["price_override"] = _base_price * prc_m
-            _cd[base_plant_inputs["crop"]] = _mod_crop
-        _cdt.COUNTRIES[_cn] = _mod_c
-        try:
-            _res = calculate_greenhouse(_mod_i)
-        finally:
-            _cdt.COUNTRIES[_cn] = _orig_c
-            if prc_m != 1.0 or yld_m != 1.0:
-                _cd[base_plant_inputs["crop"]] = _orig_crop
-        return _res
-
-    # Build plant inputs dict for sensitivity
-    _aq_plant_sens_inputs = {
-        "country": aq_inputs["country"], "crop": aq_inputs["plant_crop"],
-        "crop_source": aq_inputs.get("plant_crop_source","greenhouse"),
-        "footprint": aq_inputs["plant_footprint"],
-        "automation": aq_inputs["automation"],
-        "price_scenario": aq_inputs["price_scenario"], "price_override": 0.0,
-        "packaging_cost": aq_inputs["packaging_cost"],
-        "loss_rate": aq_inputs["loss_rate"],
-        "net_grow_factor": aq_inputs["net_grow_factor"],
-        "walkways_factor": aq_inputs["walkways_factor"],
-        "water_price": aq_inputs["water_price"],
-        "rent_monthly": aq_inputs["rent_monthly"],
-        "real_estate_capex": aq_inputs["real_estate_capex"],
-        "harvest_mode": aq_inputs["harvest_mode"],
-        "depreciation_years": aq_inputs["depreciation_years"],
-        "tax_rate": aq_inputs["tax_rate"], "ltv": aq_inputs["ltv"],
-        "interest_rate": aq_inputs["interest_rate"],
-        "loan_term_years": aq_inputs["loan_term_years"],
-        "discount_rate": aq_inputs["discount_rate"],
-    }
-
     st.markdown("#### Tornado Chart — Plant EBITDA Sensitivity")
     st.caption("Each bar shows how plant EBITDA changes when one variable is stressed. Fish side held constant.")
 
