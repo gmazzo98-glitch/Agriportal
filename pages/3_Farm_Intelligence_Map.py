@@ -45,6 +45,88 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _ors_road_distances(src_lat: float, src_lon: float, targets: list[dict]) -> list[float | None]:
+    """
+    Queries OpenRouteService matrix API for real road distances.
+    Requires ORS_API_KEY in st.secrets. Returns list of km values (None on failure).
+    Free tier: 2,000 matrix requests/day, up to 50 destinations per call.
+    Register at https://openrouteservice.org/dev/#/login to get a free key.
+    """
+    try:
+        api_key = st.secrets.get("ORS_API_KEY", "")
+    except Exception:
+        api_key = ""
+    if not api_key:
+        return [None] * len(targets)
+
+    locations = [[src_lon, src_lat]] + [[t["lon"], t["lat"]] for t in targets]
+    payload = {
+        "locations": locations,
+        "sources": [0],
+        "metrics": ["distance"],
+        "units": "km",
+    }
+    try:
+        resp = requests.post(
+            "https://api.openrouteservice.org/v2/matrix/driving-car",
+            json=payload,
+            headers={
+                "Authorization": api_key,
+                "Content-Type": "application/json",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        row = data["distances"][0]          # source=0 → one row
+        return [round(d, 2) if d is not None else None for d in row[1:]]
+    except Exception as e:
+        print(f"ORS road distance failed: {e}")
+        return [None] * len(targets)
+
+
+def add_osrm_distances(df: pd.DataFrame, src_lat: float, src_lon: float) -> pd.DataFrame:
+    """
+    Calculates straight-line (Haversine) distance for all rows, then upgrades
+    high-priority points to real road distances via OpenRouteService if an
+    ORS_API_KEY is present in st.secrets.
+    Falls back silently to Haversine when the key is absent or the call fails.
+    """
+    if df.empty:
+        return df
+
+    # Haversine baseline for every row
+    df["Distance (km)"] = df.apply(
+        lambda row: round(haversine_km(src_lat, src_lon, row["lat"], row["lon"]), 2), axis=1
+    )
+    df["Routing"] = "Haversine (Direct)"
+    df = df.sort_values("Distance (km)").reset_index(drop=True)
+
+    # Select subset to upgrade with road distances
+    if "Type" in df.columns:
+        priority_infra = [
+            "Airport", "Airport Terminal", "Commercial Port", "Harbour / Port",
+            "Rail Freight Terminal", "Rail Station", "Motorway Junction", "Cold Storage",
+        ]
+        subset = df[df["Type"].isin(priority_infra)].head(40).copy()
+    else:
+        subset = df.head(20).copy()
+
+    if subset.empty:
+        return df
+
+    targets = [{"lat": row.lat, "lon": row.lon} for _, row in subset.iterrows()]
+    road_km = _ors_road_distances(src_lat, src_lon, targets)
+
+    for i, idx in enumerate(subset.index):
+        if road_km[i] is not None:
+            df.at[idx, "Distance (km)"] = road_km[i]
+            df.at[idx, "Routing"] = "ORS (Road)"
+
+    df = df.sort_values("Distance (km)").reset_index(drop=True)
+    return df
+
+
 def get_default_location() -> tuple[float, float]:
     try:
         resp = requests.get("https://ipapi.co/json/", timeout=5)
@@ -77,14 +159,80 @@ def run_overpass_query(query: str) -> list[dict]:
     ]
     for endpoint in endpoints:
         try:
-            resp = requests.post(endpoint, data={"data": query}, timeout=35)
+            resp = requests.post(endpoint, data={"data": query}, timeout=95)
             resp.raise_for_status()
             return resp.json().get("elements", [])
         except requests.exceptions.Timeout:
             continue
         except requests.exceptions.HTTPError:
             continue
-    raise RuntimeError("All Overpass API servers failed. Try again in a moment.")
+    raise RuntimeError("All Overpass API servers failed or timed out. Try reducing the radius.")
+
+
+def find_triangulation_target(target_label: str, lat: float, lng: float, search_radius_km: int, df_w: pd.DataFrame, df_l: pd.DataFrame) -> dict | None:
+    """Finds the nearest target by first checking local DFs, then querying Overpass if needed."""
+    # 1. Check existing DataFrames first to save API calls
+    if df_l is not None and not df_l.empty and target_label in df_l["Type"].values:
+        subset = df_l[df_l["Type"] == target_label]
+        nearest = subset.loc[subset["Distance (km)"].idxmin()]
+        if nearest["Distance (km)"] <= search_radius_km:
+            return {"lat": nearest["lat"], "lon": nearest["lon"], "name": nearest["Name"]}
+
+    if df_w is not None and not df_w.empty and target_label in df_w["Potential Fertilizer Waste"].values:
+        subset = df_w[df_w["Potential Fertilizer Waste"] == target_label]
+        nearest = subset.loc[subset["Distance (km)"].idxmin()]
+        if nearest["Distance (km)"] <= search_radius_km:
+            return {"lat": nearest["lat"], "lon": nearest["lon"], "name": nearest["Company Name"]}
+
+    # 2. If not found locally, build a targeted Overpass query
+    search_radius_m = search_radius_km * 1000
+    query_inner = ""
+
+    # Check if target is an Infrastructure type
+    for key, val, label, _, _ in INFRA_TYPES:
+        if label == target_label:
+            if val:
+                query_inner += f'node["{key}"="{val}"](around:{search_radius_m},{lat},{lng});\n'
+                query_inner += f'way["{key}"="{val}"](around:{search_radius_m},{lat},{lng});\n'
+            else:
+                query_inner += f'node["{key}"](around:{search_radius_m},{lat},{lng});\n'
+                query_inner += f'way["{key}"](around:{search_radius_m},{lat},{lng});\n'
+
+    # Check if target is a Waste type
+    if not query_inner:
+        for tags_key, (ind, waste) in TAG_WASTE_MAP.items():
+            if waste == target_label:
+                k, v = tags_key.split("=")
+                query_inner += f'node["{k}"="{v}"](around:{search_radius_m},{lat},{lng});\n'
+                query_inner += f'way["{k}"="{v}"](around:{search_radius_m},{lat},{lng});\n'
+
+    if not query_inner:
+        return None 
+
+    query = f"[out:json][timeout:30];\n(\n  {query_inner});\nout center tags;"
+    try:
+        elements = run_overpass_query(query)
+        if not elements:
+            return None
+        
+        # Find the closest coordinate from the Overpass results
+        best_dist = float('inf')
+        best_match = None
+        for el in elements:
+            t_lat = el.get("center", {}).get("lat") or el.get("lat")
+            t_lon = el.get("center", {}).get("lon") or el.get("lon")
+            if not t_lat or not t_lon: continue
+            
+            dist = haversine_km(lat, lng, t_lat, t_lon)
+            if dist < best_dist and dist <= search_radius_km:
+                best_dist = dist
+                tags = el.get("tags", {})
+                name = tags.get("name", tags.get("operator", "Unnamed Facility"))
+                best_match = {"lat": t_lat, "lon": t_lon, "name": name}
+        return best_match
+    except Exception as e:
+        print(f"Triangulation query failed: {e}")
+        return None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -204,7 +352,7 @@ def classify_facility(name: str, tags: dict) -> tuple[str, str]:
 
 def fetch_waste_layer(lat: float, lng: float, radius_m: int) -> list[dict]:
     query = f"""
-    [out:json][timeout:30];
+    [out:json][timeout:90][maxsize:1073741824];
     (
       node["landuse"="industrial"](around:{radius_m},{lat},{lng});
       way["landuse"="industrial"](around:{radius_m},{lat},{lng});
@@ -235,7 +383,7 @@ def build_waste_dataframe(elements: list[dict], search_lat: float, search_lon: f
         if lat is None or lon is None:
             continue
         addr_parts = [tags.get("addr:street",""), tags.get("addr:housenumber",""), tags.get("addr:city","")]
-        address    = ", ".join(p for p in addr_parts if p) or "Address not available"
+        address    = ", ".join(p for p in addr_parts if p) or "—"
         categories = ", ".join(f"{k}={tags[k]}" for k in ["landuse","industrial","man_made","craft","amenity"] if k in tags)
         industry, waste = classify_facility(name, tags)
         rows.append({
@@ -244,16 +392,14 @@ def build_waste_dataframe(elements: list[dict], search_lat: float, search_lon: f
             "OSM Categories":             categories,
             "Predicted Industry":         industry,
             "Potential Fertilizer Waste": waste,
-            "lat":  lat, "lon": lon,
-            "Distance (km)": round(haversine_km(search_lat, search_lon, lat, lon), 2),
+            "lat":  lat, "lon": lon, # Distance is now calculated in add_osrm_distances
             "N Score":   NPK_SCORES.get(waste, {}).get("N", 0),
             "P Score":   NPK_SCORES.get(waste, {}).get("P", 0),
             "K Score":   NPK_SCORES.get(waste, {}).get("K", 0),
             "NPK Label": NPK_SCORES.get(waste, {}).get("label", "—"),
         })
     df = pd.DataFrame(rows)
-    if not df.empty:
-        df = df.sort_values("Distance (km)").reset_index(drop=True)
+    df = add_osrm_distances(df, search_lat, search_lon)
     return df
 
 
@@ -310,7 +456,7 @@ def fetch_logistics_layer(lat: float, lng: float, radius_m: int) -> list[dict]:
             tag_filters.append(f'way["{key}"](around:{radius_m},{lat},{lng});')
             seen_keys.add(key)
     inner = "\n  ".join(tag_filters)
-    query = f"[out:json][timeout:30];\n(\n  {inner}\n);\nout center tags;"
+    query = f"[out:json][timeout:90][maxsize:1073741824];\n(\n  {inner}\n);\nout center tags;"
     return run_overpass_query(query)
 
 
@@ -337,14 +483,12 @@ def build_logistics_dataframe(elements: list[dict], search_lat: float, search_ln
         rows.append({
             "Name":          name,
             "Type":          label,
-            "Distance (km)": round(haversine_km(search_lat, search_lng, lat, lon), 2),
             "Address":       address,
             "lat":  lat, "lon": lon,
             "color": color,
         })
     df = pd.DataFrame(rows) if rows else pd.DataFrame()
-    if not df.empty:
-        df = df.sort_values("Distance (km)").reset_index(drop=True)
+    df = add_osrm_distances(df, search_lat, search_lng)
     return df
 
 
@@ -392,7 +536,7 @@ def compute_nearest_by_category(df: pd.DataFrame) -> list[dict]:
     for category in priority_categories:
         subset = df[df["Type"].isin(category["types"])]
         if not subset.empty:
-            nearest = subset.iloc[subset["Distance (km)"].idxmin()]
+            nearest = subset.loc[subset["Distance (km)"].idxmin()]
             results.append({
                 "label": category["label"], "name": nearest["Name"],
                 "distance_km": nearest["Distance (km)"], "found": True,
@@ -566,7 +710,6 @@ def execute_farm_save(link_mode, target_farm, new_farm_name, plat, plng, matched
 st.set_page_config(page_title="Farm Intelligence Map", page_icon="🗺️", layout="wide")
 inject_styles()
 from core.auth import require_login
-from core.auth import require_login
 require_login()
 st.title("🗺️ Farm Intelligence Map")
 st.markdown(
@@ -577,17 +720,42 @@ st.markdown(
 
 # ── Session state ─────────────────────────────────────────────────────────────
 
-# Check for active farm and sync coordinates if necessary
+# Check for active farm and sync coordinates + rehydrate saved FIM data from metadata
 _active_farm_init = st.session_state.get("active_farm")
 if _active_farm_init and _active_farm_init.get("lat") and _active_farm_init.get("lon"):
-    # If map coords are not set, or don't match the active farm, update them.
-    if (st.session_state.get("fim_lat") != _active_farm_init["lat"] or
-        st.session_state.get("fim_lng") != _active_farm_init["lon"]):
+    _coords_changed = (
+        st.session_state.get("fim_lat") != _active_farm_init["lat"] or
+        st.session_state.get("fim_lng") != _active_farm_init["lon"]
+    )
+    if _coords_changed:
         st.session_state["fim_lat"] = _active_farm_init["lat"]
         st.session_state["fim_lng"] = _active_farm_init["lon"]
-        # Clear cached results as the location has changed
         st.session_state["fim_waste_df"]     = None
         st.session_state["fim_logistics_df"] = None
+
+    # Rehydrate saved FIM data from farm metadata if session cache is empty
+    _raw_meta_init = _active_farm_init.get("metadata")
+    if isinstance(_raw_meta_init, str):
+        import json as _json
+        try:
+            _raw_meta_init = _json.loads(_raw_meta_init)
+        except Exception:
+            _raw_meta_init = {}
+    _meta = _raw_meta_init if isinstance(_raw_meta_init, dict) else {}
+    if st.session_state.get("fim_waste_df") is None and "fim_waste_data" in _meta:
+        try:
+            _df = pd.DataFrame(_meta["fim_waste_data"])
+            if not _df.empty:
+                st.session_state["fim_waste_df"] = _df
+        except Exception:
+            pass
+    if st.session_state.get("fim_logistics_df") is None and "fim_logistics_data" in _meta:
+        try:
+            _df = pd.DataFrame(_meta["fim_logistics_data"])
+            if not _df.empty:
+                st.session_state["fim_logistics_df"] = _df
+        except Exception:
+            pass
 
 # Fallback for first load without an active farm
 if "fim_lat" not in st.session_state:
@@ -608,6 +776,7 @@ for key, default in [
     ("fim_logistics_df",    None),
     ("fim_suitability_active", False),
     ("fim_suitability_count",  2),
+    ("fim_suitability_results", {}),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -748,27 +917,83 @@ with st.sidebar:
     search_clicked = st.button("🔍 Search All Active Layers", use_container_width=True)
     st.caption("**Data:** OpenStreetMap contributors via Overpass API.")
 
+    # ── Search execution ──────────────────────────────────────────────────────────
+    if search_clicked:
+        # Clear old caches instantly so ghost data doesn't persist if a massive query fails
+        st.session_state["fim_waste_df"] = None
+        st.session_state["fim_logistics_df"] = None
+        
+        if layer_waste:
+            with st.spinner("♻️ Querying waste sources (may take up to 90s for large radius)…"):
+                try:
+                    elements = fetch_waste_layer(lat, lng, radius_m)
+                    df_w     = build_waste_dataframe(elements, lat, lng)
+                    st.session_state["fim_waste_df"] = df_w
+                except Exception as e:
+                    st.error(f"Waste layer error: {e}")
+
+        if layer_logistics:
+            with st.spinner("🚛 Querying logistics infrastructure…"):
+                try:
+                    elements = fetch_logistics_layer(lat, lng, radius_m)
+                    df_l     = build_logistics_dataframe(elements, lat, lng)
+                    st.session_state["fim_logistics_df"] = df_l
+                except Exception as e:
+                    st.error(f"Logistics layer error: {e}")
+
+        st.rerun()
+
     with st.expander("📍 Location Suitability Finder", expanded=False):
         st.caption(
-            "Define up to 3 reference points and maximum distances. "
-            "The map will show their coverage circles — the overlap is your optimal zone."
+            "Select up to 3 targets. The map will automatically search a wide radius, "
+            "pinpoint the closest matches, and draw their suitability zones."
         )
-        st.number_input(
-            "Number of reference points", min_value=1, max_value=3, value=2, step=1,
-            key="fim_suitability_count"
+        
+        # Build unified dropdown options
+        all_infra_types = sorted(set(label for _, _, label, _, _ in INFRA_TYPES))
+        all_waste_types = sorted(set([e["waste"] for e in NAME_KEYWORD_MAP] + [v[1] for v in TAG_WASTE_MAP.values()]))
+        dropdown_options = ["None / Skip"] + all_infra_types + all_waste_types
+
+        st.slider(
+            "Global Search Radius (km) — how far to look for targets", 
+            min_value=10, max_value=150, value=50, step=10,
+            key="fim_suit_search_radius",
+            help="If the target isn't in your active layers, the app will search this far to find it."
         )
-        for i in range(st.session_state.get("fim_suitability_count", 2)):
-            st.markdown(f"**Reference point {i+1}**")
-            st.text_input("Label", key=f"fim_suit_label_{i}",
-                          placeholder="e.g. Motorway Junction")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.number_input("Latitude", key=f"fim_suit_lat_{i}", format="%.4f", step=0.001, value=0.0)
-            with c2:
-                st.number_input("Longitude", key=f"fim_suit_lng_{i}", format="%.4f", step=0.001, value=0.0)
-            st.slider("Max distance (km)", min_value=1, max_value=100, value=20, step=1, key=f"fim_suit_radius_{i}")
-            st.caption("Tip: run a search first, then copy coordinates from the results table.")
+
         st.checkbox("Show suitability circles on map", value=False, key="fim_suitability_active")
+
+        for i in range(3):
+            st.markdown(f"**Target {i+1}**")
+            st.selectbox(
+                "Facility / Waste Type", options=dropdown_options, 
+                key=f"fim_suit_target_{i}"
+            )
+            st.slider(
+                f"Ideal Proximity (km) for Target {i+1}", 
+                min_value=1, max_value=100, value=20, step=1, 
+                key=f"fim_suit_radius_{i}",
+                help="Draws a circle of this radius around the discovered target."
+            )
+
+# ── Suitability pre-computation (must run before map block — no st.* calls allowed inside map) ──
+if st.session_state.get("fim_suitability_active", False):
+    _search_radius_km = st.session_state.get("fim_suit_search_radius", 50)
+    _suit_results = {}
+    for _i in range(3):
+        _target = st.session_state.get(f"fim_suit_target_{_i}", "None / Skip")
+        if _target and _target != "None / Skip":
+            with st.spinner(f"📍 Locating nearest: {_target}…"):
+                _suit_results[_i] = find_triangulation_target(
+                    _target, lat, lng, _search_radius_km,
+                    st.session_state.get("fim_waste_df"),
+                    st.session_state.get("fim_logistics_df"),
+                )
+            if _suit_results[_i] is None:
+                st.toast(f"No {_target} found within {_search_radius_km} km.", icon="⚠️")
+    st.session_state["fim_suitability_results"] = _suit_results
+else:
+    st.session_state["fim_suitability_results"] = {}
 
 # ── Map (always visible) ──────────────────────────────────────────────────────
 
@@ -814,17 +1039,19 @@ folium.Circle(
     color="#00e5a0", weight=1.5, fill=True, fill_opacity=0.04,
 ).add_to(m)
 
-# Suitability circles overlay
+# Suitability circles overlay — data pre-computed above, no st.* calls here
 if st.session_state.get("fim_suitability_active", False):
     _suit_colors = ["#FF6B6B", "#FFD93D", "#6BCB77"]
-    _suit_count  = st.session_state.get("fim_suitability_count", 2)
-    for _i in range(_suit_count):
-        _slat = st.session_state.get(f"fim_suit_lat_{_i}", 0.0)
-        _slng = st.session_state.get(f"fim_suit_lng_{_i}", 0.0)
-        _srad = st.session_state.get(f"fim_suit_radius_{_i}", 20) * 1000
-        _slbl = st.session_state.get(f"fim_suit_label_{_i}", f"Reference {_i+1}") or f"Reference {_i+1}"
-        _scol = _suit_colors[_i % len(_suit_colors)]
-        if _slat != 0.0 or _slng != 0.0:
+    _suit_results = st.session_state.get("fim_suitability_results", {})
+    for _i in range(3):
+        _target      = st.session_state.get(f"fim_suit_target_{_i}", "None / Skip")
+        _srad        = st.session_state.get(f"fim_suit_radius_{_i}", 20) * 1000
+        _scol        = _suit_colors[_i]
+        nearest_data = _suit_results.get(_i)
+        if _target != "None / Skip" and nearest_data:
+            _slat  = nearest_data["lat"]
+            _slng  = nearest_data["lon"]
+            _sname = nearest_data["name"]
             folium.Circle(
                 location=[_slat, _slng],
                 radius=_srad,
@@ -833,11 +1060,11 @@ if st.session_state.get("fim_suitability_active", False):
                 fill=True,
                 fill_opacity=0.08,
                 dash_array="4",
-                tooltip=f"Suitability zone: {_slbl} (≤ {_srad//1000} km)",
+                tooltip=f"Suitability zone: {_sname} (≤ {_srad//1000} km)",
             ).add_to(m)
             folium.Marker(
                 location=[_slat, _slng],
-                tooltip=f"📌 {_slbl}",
+                tooltip=f"📌 {_target}: {_sname}",
                 icon=folium.Icon(color="red" if _i==0 else ("orange" if _i==1 else "green"), icon="map-pin", prefix="fa"),
             ).add_to(m)
 
@@ -925,32 +1152,75 @@ if legend_html:
 
 st.divider()
 
-# ── Search execution ──────────────────────────────────────────────────────────
-
-if search_clicked:
-    if layer_waste:
-        with st.spinner("♻️ Querying waste sources…"):
-            try:
-                elements = fetch_waste_layer(lat, lng, radius_m)
-                df_w     = build_waste_dataframe(elements, lat, lng)
-                st.session_state["fim_waste_df"] = df_w
-            except Exception as e:
-                st.error(f"Waste layer error: {e}")
-
-    if layer_logistics:
-        with st.spinner("🚛 Querying logistics infrastructure…"):
-            try:
-                elements = fetch_logistics_layer(lat, lng, radius_m)
-                df_l     = build_logistics_dataframe(elements, lat, lng)
-                st.session_state["fim_logistics_df"] = df_l
-            except Exception as e:
-                st.error(f"Logistics layer error: {e}")
-
-    st.rerun()
-
 if waste_cached is None and logistics_cached is None:
     st.info("👈 Toggle the layers you want in the sidebar, set your radius, and click **Search**.")
     st.stop()
+
+# ── Save Results to Farm Profile ──────────────────────────────────────────────
+active_farm = st.session_state.get("active_farm")
+if active_farm and (waste_cached is not None or logistics_cached is not None):
+    _meta_check   = active_farm.get("metadata") or {}
+    _has_saved_w  = "fim_waste_data"     in _meta_check and bool(_meta_check["fim_waste_data"])
+    _has_saved_l  = "fim_logistics_data" in _meta_check and bool(_meta_check["fim_logistics_data"])
+    _has_any_saved = _has_saved_w or _has_saved_l
+
+    st.markdown(f"**💾 Intelligence Data — Farm Profile: `{active_farm['name']}`**")
+
+    if _has_any_saved:
+        _saved_parts = []
+        if _has_saved_w: _saved_parts.append(f"{len(_meta_check['fim_waste_data'])} waste facilities")
+        if _has_saved_l: _saved_parts.append(f"{len(_meta_check['fim_logistics_data'])} logistics points")
+        st.success(f"✅ Saved data loaded from profile: {' · '.join(_saved_parts)}. Re-run search and save again to refresh.")
+    else:
+        st.caption("Save current results to the farm profile — they will reload instantly next time without re-running the search.")
+
+    _sc1, _sc2 = st.columns([2, 1])
+    with _sc1:
+        if st.button("💾 Save / Overwrite to Database", type="primary", use_container_width=True):
+            with st.spinner("Saving to Supabase..."):
+                try:
+                    sb = get_supabase()
+                    farm_resp    = sb.table("farms").select("metadata").eq("id", active_farm["id"]).execute()
+                    _raw_meta    = farm_resp.data[0].get("metadata") if farm_resp.data else None
+                    if isinstance(_raw_meta, str):
+                        import json as _json
+                        _raw_meta = _json.loads(_raw_meta)
+                    existing_meta = _raw_meta if isinstance(_raw_meta, dict) else {}
+                    if waste_cached is not None:
+                        existing_meta["fim_waste_data"]     = waste_cached.to_dict(orient="records")
+                    if logistics_cached is not None:
+                        existing_meta["fim_logistics_data"] = logistics_cached.to_dict(orient="records")
+                    sb.table("farms").update({"metadata": existing_meta}).eq("id", active_farm["id"]).execute()
+                    if "metadata" not in st.session_state["active_farm"] or st.session_state["active_farm"]["metadata"] is None:
+                        st.session_state["active_farm"]["metadata"] = {}
+                    st.session_state["active_farm"]["metadata"].update(existing_meta)
+                    st.success("✅ Intelligence data saved to farm profile.")
+                except Exception as e:
+                    st.error(f"Failed to save data: {e}")
+
+    with _sc2:
+        if _has_any_saved:
+            if st.button("🗑️ Clear Saved Data", use_container_width=True):
+                with st.spinner("Clearing..."):
+                    try:
+                        sb = get_supabase()
+                        farm_resp     = sb.table("farms").select("metadata").eq("id", active_farm["id"]).execute()
+                        _raw_meta     = farm_resp.data[0].get("metadata") if farm_resp.data else None
+                        if isinstance(_raw_meta, str):
+                            import json as _json
+                            _raw_meta = _json.loads(_raw_meta)
+                        existing_meta = _raw_meta if isinstance(_raw_meta, dict) else {}
+                        existing_meta.pop("fim_waste_data",     None)
+                        existing_meta.pop("fim_logistics_data", None)
+                        sb.table("farms").update({"metadata": existing_meta}).eq("id", active_farm["id"]).execute()
+                        if st.session_state["active_farm"].get("metadata"):
+                            st.session_state["active_farm"]["metadata"].pop("fim_waste_data",     None)
+                            st.session_state["active_farm"]["metadata"].pop("fim_logistics_data", None)
+                        st.success("Saved intelligence data cleared from profile.")
+                    except Exception as e:
+                        st.error(f"Failed to clear data: {e}")
+
+    st.divider()
 
 # ═════════════════════════════════════════════════════════════════════════════
 # RESULTS — shown as tabs, one per active layer
@@ -1009,7 +1279,7 @@ if layer_waste and waste_cached is not None:
                 )
 
             st.divider()
-            display_cols      = ["Company Name","Distance (km)","Address","OSM Categories",
+            display_cols      = ["Company Name","Distance (km)","Routing","Address","OSM Categories",
                                  "Predicted Industry","Potential Fertilizer Waste","NPK Label","N Score","P Score","K Score"]
             show_matched_only = st.toggle("Show only waste-matched facilities", value=False, key="fim_wm_toggle")
             display_df        = df_w[df_w["Predicted Industry"] != "Unknown / Other"] if show_matched_only else df_w
@@ -1109,7 +1379,7 @@ if layer_logistics and logistics_cached is not None:
                             )
 
             st.divider()
-            display_cols   = ["Name", "Type", "Distance (km)", "Address"]
+            display_cols   = ["Name", "Type", "Distance (km)", "Routing", "Address"]
             priority_types = {"Airport","Airport Terminal","Commercial Port","Harbour / Port",
                               "Rail Freight Terminal","Ferry Terminal","Motorway Junction","Cold Storage"}
             show_priority  = st.toggle("Show only high-priority types", value=False, key="fim_lm_toggle")

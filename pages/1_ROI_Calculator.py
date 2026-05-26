@@ -23,6 +23,7 @@ from core.greenhouse_data_tables import GREENHOUSE_CROPS, POLYTUNNEL_CROPS, FISH
 from core.aquaponics_calculate import calculate_aquaponics, calculate_fish, COUNTRY_AMBIENT_TEMP
 from core.data_tables import COUNTRIES, CROPS, LIGHTS
 from core.climate import fetch_climate_profile, compute_natural_dli_fraction
+from core.energy_labour import get_rates_for_country_name, get_full_rates
 from core._styles import inject_styles
 from core.auth import require_login, current_user
 from core.farm_context import render_farm_context_sidebar, load_farm, clear_farm, MODALITY_RADIO
@@ -1409,6 +1410,7 @@ _SIDEBAR_DEFAULTS = {
     "roi_net_grow_factor":   85.0,
     "roi_walkways_factor":   15.0,
     "roi_water_price":       2.0,
+    "roi_kwh_override":      0.0,
     "roi_rent_monthly":      0.0,
     "roi_real_estate_capex": 0.0,
     "roi_depreciation_years": 10,
@@ -1445,7 +1447,7 @@ if "_pending_farm_load" in st.session_state:
         "roi_lights_tier", "roi_hvac", "roi_automation", "roi_price_scenario",
         "roi_harvest_mode", "roi_price_override", "roi_packaging_cost",
         "roi_loss_rate", "roi_net_grow_factor", "roi_walkways_factor",
-        "roi_water_price", "roi_rent_monthly", "roi_real_estate_capex",
+        "roi_water_price", "roi_rent_monthly", "roi_real_estate_capex", "roi_kwh_override",
         "roi_depreciation_years", "roi_tax_rate", "roi_ltv",
         "roi_interest_rate", "roi_loan_term_years", "roi_multi_crop",
         # GH
@@ -1770,7 +1772,29 @@ if modality == "🏭 Indoor Vertical Farm":
         country = st.selectbox("Country", country_list,
                                index=country_list.index(_c_default) if _c_default in country_list else 0,
                                key="roi_country")
-    
+
+        # ── Energy & Labour reference rates (energy_labour module) ────────────
+        _el_rates  = get_rates_for_country_name(country)
+        _el_e      = _el_rates["energy"]
+        _el_l      = _el_rates["labour"]
+        _model_kwh = COUNTRIES.get(country, {}).get("kwh", 0)
+        if _el_rates["iso"]:
+            _el_delta = _el_e["industrial"] - _model_kwh
+            _el_arrow = "▲" if _el_delta > 0.005 else ("▼" if _el_delta < -0.005 else "≈")
+            _el_col   = "#d97706" if _el_delta > 0.005 else ("#16a34a" if _el_delta < -0.005 else "#6b7280")
+            _el_live  = " · ⚡ Live" if _el_e.get("live") else ""
+            _el_html  = (
+                f"<div style='font-size:11px;color:#6b7280;margin:-4px 0 8px 0;"
+                f"padding:6px 8px;background:#f8f9fa;border-radius:4px;"
+                f"border-left:3px solid {_el_col};'>"
+                f"<b>Ref. rates ({_el_rates['iso']})</b> &nbsp;&middot;&nbsp; "
+                f"Electricity industrial: <b style='color:{_el_col};'>${_el_e['industrial']:.3f}/kWh {_el_arrow}</b> "
+                f"<span style='color:#9ca3af;'>(model ${_model_kwh:.3f})</span>"
+                f"&nbsp;&middot;&nbsp; Labour: <b>${_el_l['industrial_loaded']:.0f}/hr</b>"
+                f"{_el_live}</div>"
+            )
+            st.markdown(_el_html, unsafe_allow_html=True)
+
         # ── Multi-crop toggle ─────────────────────────────────────────────────
         multi_crop_mode = st.toggle("Multi-crop mode",
                                      value=st.session_state.get("roi_multi_crop", False),
@@ -1834,9 +1858,31 @@ if modality == "🏭 Indoor Vertical Farm":
     
         hvac_list   = ["Excellent conditions", "Standard", "High HVAC"]
         _hv_default = st.session_state["roi_hvac"]
-        hvac        = st.selectbox("HVAC", hvac_list,
+        # Auto-suggest HVAC tier from saved ambient temperature if available
+        _vf_amb_temp = st.session_state.get("active_farm", {}).get("ambient_temp_annual")
+        if _vf_amb_temp is not None:
+            _vf_suggested_hvac = (
+                "Excellent conditions" if _vf_amb_temp >= 17
+                else "Standard" if _vf_amb_temp >= 12
+                else "High HVAC"
+            )
+            if _hv_default != _vf_suggested_hvac:
+                st.caption(
+                    f"\U0001f4a1 Climate data suggests **{_vf_suggested_hvac}** "
+                    f"(ambient {_vf_amb_temp:.1f}\u00b0C \u00b7 "
+                    f"\u226517\u00b0C \u2192 Excellent \u00b7 12\u201317\u00b0C \u2192 Standard \u00b7 <12\u00b0C \u2192 High HVAC). "
+                    f"Current selection: {_hv_default}."
+                )
+        hvac        = st.selectbox("HVAC conditions",
+                                   hvac_list,
                                    index=hvac_list.index(_hv_default) if _hv_default in hvac_list else 1,
-                                   key="roi_hvac")
+                                   key="roi_hvac",
+                                   help=(
+                                       "Controls total energy multiplier (lighting + HVAC + pumps + controls). "
+                                       "Excellent = 1.70\u00d7 \u00b7 Standard = 1.83\u00d7 \u00b7 High HVAC = 2.025\u00d7. "
+                                       "Reflects facility insulation quality and climate severity. "
+                                       "Set farm coordinates in the Farm Intelligence Map to get an automatic suggestion."
+                                   ))
     
         auto_list   = ["None", "Low", "Medium", "High"]
         _au_default = st.session_state["roi_automation"]
@@ -1884,6 +1930,17 @@ if modality == "🏭 Indoor Vertical Farm":
         water_price       = st.number_input("Water Price ($/m³)",
                                             value=st.session_state["roi_water_price"],
                                             step=0.1, min_value=0.0, key="roi_water_price")
+        _vf_kwh_default   = COUNTRIES.get(country, {}).get("kwh", 0.0)
+        kwh_override      = st.number_input(
+            "Electricity Price ($/kWh)",
+            value=float(st.session_state.get("roi_kwh_override") or _vf_kwh_default),
+            step=0.005, min_value=0.001, format="%.4f", key="roi_kwh_override",
+            help=(
+                f"Country default (from IEA/Eurostat table): ${_vf_kwh_default:.4f}/kWh. "
+                "Override with your actual site tariff if different. "
+                "Industrial/commercial rate is typically 30–60% lower than residential."
+            )
+        )
         rent_monthly      = st.number_input("Monthly Rent ($)",
                                             value=st.session_state["roi_rent_monthly"],
                                             step=100.0, min_value=0.0, key="roi_rent_monthly")
@@ -1968,10 +2025,15 @@ if modality == "🏭 Indoor Vertical Farm":
         st.warning("⚠️ Fix crop allocation (must sum to 100%) before results are shown.")
         st.stop()
 
+    # Apply electricity price override (patches COUNTRIES entry temporarily)
+    _vf_kwh_original = COUNTRIES[country]["kwh"]
+    if abs(kwh_override - _vf_kwh_original) > 0.0001:
+        COUNTRIES[country]["kwh"] = kwh_override
     if _mix_valid:
         r = run_multicrop(inputs, _crop_mix)
     else:
         r = calculate(inputs)
+    COUNTRIES[country]["kwh"] = _vf_kwh_original  # always restore
 
     # ── Climate profile display ───────────────────────────────────────────────
     _active_farm_data = st.session_state.get("active_farm")
@@ -1988,6 +2050,90 @@ if modality == "🏭 Indoor Vertical Farm":
             f"({'supplemental lighting required' if _nat_frac < 1.0 else 'no supplemental lighting required'})"
         )
     
+    # ── Data Sources panel ───────────────────────────────────────────────────
+    _vf_farm_has_climate = bool(st.session_state.get("active_farm", {}).get("mean_annual_dli"))
+    _vf_active_data      = st.session_state.get("active_farm") or {}
+    with st.expander("ℹ️ Data sources & calculation transparency", expanded=False):
+        _di1, _di2 = st.columns(2)
+        with _di1:
+            st.markdown("**📡 Automatic — from Open-Meteo Archive API**")
+            if _vf_farm_has_climate:
+                _vf_dli  = _vf_active_data.get("mean_annual_dli", 0)
+                _vf_temp = _vf_active_data.get("ambient_temp_annual", 0)
+                _vf_sugg = "Excellent conditions" if _vf_temp >= 17 else ("Standard" if _vf_temp >= 12 else "High HVAC")
+                st.markdown(
+                    f"- **Mean annual DLI: {_vf_dli:.1f} mol/m²/day** "
+                    f"— shown for information only. VF uses fully artificial lighting; "
+                    f"location solar irradiance does not affect energy calculations.\n"
+                    f"- **Ambient temperature: {_vf_temp:.1f}°C** "
+                    f"— used to suggest HVAC tier (suggests **{_vf_sugg}** for this location). "
+                    f"Does not directly enter the energy formula; the HVAC selectbox is the active input.\n"
+                    f"- Source: Open-Meteo 10-year historical archive (`archive-api.open-meteo.com/v1/archive`). "
+                    f"Fetched once at farm save time, stored in Supabase."
+                )
+            else:
+                st.markdown(
+                    "- ⚠️ **No climate data available** for this farm.\n"
+                    "- Set farm coordinates in the **Farm Intelligence Map**, then re-save the farm profile.\n"
+                    "- Until then, the HVAC tier selection has no location-based suggestion."
+                )
+        with _di2:
+            st.markdown("**🎛️ Manual inputs — set in this calculator**")
+            _hvac_cur = st.session_state.get("roi_hvac", "Standard")
+            _hvac_factors_map = {"Excellent conditions": "1.70×", "Standard": "1.83×", "High HVAC": "2.025×"}
+            st.markdown(
+                f"- **HVAC tier: {_hvac_cur}** (multiplier: {_hvac_factors_map.get(_hvac_cur, '1.83×')}) "
+                f"— applied to lighting energy to yield total facility electricity (lighting + HVAC + pumps + controls). "
+                f"Reflects insulation quality and climate severity. See Assumptions §3.\n"
+                f"- Lights tier, automation, crop, footprint, levels\n"
+                f"- Country → electricity price (IEA/Eurostat, see §5)\n"
+                f"- All financial structure inputs (see §17.7)"
+            )
+        st.caption(
+            "ℹ️ Formula: Energy = DLI × 0.2778 / LED efficacy × cycle days "
+            "× HVAC factor × cycles/yr × EGA × €/kWh. Full derivation in Assumptions §3."
+        )
+
+
+    # ── Energy & Labour calibration callout ──────────────────────────────────
+    _el_r2    = get_rates_for_country_name(inputs["country"])
+    _el_e2    = _el_r2["energy"]
+    _el_l2    = _el_r2["labour"]
+    _mkwh2    = COUNTRIES.get(inputs["country"], {}).get("kwh", 0)
+    _mlabour2 = COUNTRIES.get(inputs["country"], {}).get("labour", 0)
+    if _el_r2["iso"]:
+        _e_flag  = abs(_el_e2["industrial"] - _mkwh2) > 0.01
+        _l_flag  = abs(_el_l2["industrial_loaded"] - _mlabour2) > 3.0
+        _exp_lbl = "⚠️ Verify your input assumptions" if (_e_flag or _l_flag) else "✅ Input assumptions cross-check"
+        with st.expander(_exp_lbl, expanded=(_e_flag or _l_flag)):
+            _rc1, _rc2 = st.columns(2)
+            with _rc1:
+                st.markdown("**⚡ Electricity**")
+                _e_dir = "higher" if _el_e2["industrial"] > _mkwh2 else "lower"
+                _e_pct = abs(_el_e2["industrial"] - _mkwh2) / _mkwh2 * 100 if _mkwh2 else 0
+                if _e_flag:
+                    st.warning(
+                        f"Reference industrial rate: **${_el_e2['industrial']:.3f}/kWh** "
+                        f"({_e_pct:.0f}% {_e_dir} than model’s ${_mkwh2:.3f}/kWh). "
+                        f"Verify country default or use a site-specific override if your tariff differs."
+                    )
+                else:
+                    st.success(f"Model electricity (${_mkwh2:.3f}/kWh) aligns with reference industrial rate (${_el_e2['industrial']:.3f}/kWh).")
+                st.caption(f"Source: {_el_e2['source']}" + (f" · ⚡ {_el_e2['live_note']}" if _el_e2.get("live") else ""))
+            with _rc2:
+                st.markdown("**👷 Labour**")
+                _l_dir = "higher" if _el_l2["industrial_loaded"] > _mlabour2 else "lower"
+                _l_pct = abs(_el_l2["industrial_loaded"] - _mlabour2) / _mlabour2 * 100 if _mlabour2 else 0
+                if _l_flag:
+                    st.warning(
+                        f"Reference fully-loaded industrial: **${_el_l2['industrial_loaded']:.0f}/hr** "
+                        f"({_l_pct:.0f}% {_l_dir} than model’s ${_mlabour2:.0f}/hr). "
+                        f"Overhead {_el_l2['overhead_pct']} applied (base ${_el_l2['industrial_base']:.0f}/hr)."
+                    )
+                else:
+                    st.success(f"Model labour (${_mlabour2:.0f}/hr) aligns with reference (${_el_l2['industrial_loaded']:.0f}/hr, overhead {_el_l2['overhead_pct']}).")
+                st.caption(f"Source: {_el_l2['source']}")
+
     # ── PDF Report Generator ─────────────────────────────────────────────────
     def generate_pdf_report(inputs: dict, r: dict) -> bytes:
         _fn = st.session_state.get("active_farm", {}).get("name", "")
@@ -2972,6 +3118,7 @@ elif modality == "🌿 High-Tech Greenhouse":
         "gh_net_grow_factor":   90.0,
         "gh_walkways_factor":   10.0,
         "gh_water_price":       2.0,
+        "gh_kwh_override":      0.0,
         "gh_rent_monthly":      0.0,
         "gh_real_estate_capex": 0.0,
         "gh_depreciation_years": 15,
@@ -3001,6 +3148,28 @@ elif modality == "🌿 High-Tech Greenhouse":
         gh_country = st.selectbox("Country", gh_country_list,
                                   index=gh_country_list.index(st.session_state["gh_country"]) if st.session_state["gh_country"] in gh_country_list else 0,
                                   key="gh_country")
+
+        # ── Energy & Labour reference rates (energy_labour module) ────────────
+        _el_rates  = get_rates_for_country_name(gh_country)
+        _el_e      = _el_rates["energy"]
+        _el_l      = _el_rates["labour"]
+        _model_kwh = COUNTRIES.get(gh_country, {}).get("kwh", 0)
+        if _el_rates["iso"]:
+            _el_delta = _el_e["industrial"] - _model_kwh
+            _el_arrow = "▲" if _el_delta > 0.005 else ("▼" if _el_delta < -0.005 else "≈")
+            _el_col   = "#d97706" if _el_delta > 0.005 else ("#16a34a" if _el_delta < -0.005 else "#6b7280")
+            _el_live  = " · ⚡ Live" if _el_e.get("live") else ""
+            _el_html  = (
+                f"<div style='font-size:11px;color:#6b7280;margin:-4px 0 8px 0;"
+                f"padding:6px 8px;background:#f8f9fa;border-radius:4px;"
+                f"border-left:3px solid {_el_col};'>"
+                f"<b>Ref. rates ({_el_rates['iso']})</b> &nbsp;&middot;&nbsp; "
+                f"Electricity industrial: <b style='color:{_el_col};'>${_el_e['industrial']:.3f}/kWh {_el_arrow}</b> "
+                f"<span style='color:#9ca3af;'>(model ${_model_kwh:.3f})</span>"
+                f"&nbsp;&middot;&nbsp; Labour: <b>${_el_l['industrial_loaded']:.0f}/hr</b>"
+                f"{_el_live}</div>"
+            )
+            st.markdown(_el_html, unsafe_allow_html=True)
 
         gh_crop_source = st.radio("Crop source", ["Greenhouse", "Polytunnel"],
                                   index=0 if st.session_state["gh_crop_source"] == "Greenhouse" else 1,
@@ -3110,6 +3279,17 @@ elif modality == "🌿 High-Tech Greenhouse":
         gh_water_price       = st.number_input("Water Price ($/m³)",
                                                value=st.session_state["gh_water_price"],
                                                step=0.1, min_value=0.0, key="gh_water_price")
+        _gh_kwh_default      = COUNTRIES.get(gh_country, {}).get("kwh", 0.0)
+        gh_kwh_override      = st.number_input(
+            "Electricity Price ($/kWh)",
+            value=float(st.session_state.get("gh_kwh_override") or _gh_kwh_default),
+            step=0.005, min_value=0.001, format="%.4f", key="gh_kwh_override",
+            help=(
+                f"Country default: ${_gh_kwh_default:.4f}/kWh. "
+                "Override with your actual site tariff. "
+                "Industrial rate is typically 30–60% lower than residential."
+            )
+        )
         gh_rent_monthly      = st.number_input("Monthly Rent ($)",
                                                value=st.session_state["gh_rent_monthly"],
                                                step=100.0, min_value=0.0, key="gh_rent_monthly")
@@ -3176,11 +3356,16 @@ elif modality == "🌿 High-Tech Greenhouse":
 
     _gh_crop_data_dict = GREENHOUSE_CROPS if gh_crop_source == "Greenhouse" else POLYTUNNEL_CROPS
 
+    # Apply electricity price override
+    _gh_kwh_original = COUNTRIES[gh_country]["kwh"]
+    if abs(gh_kwh_override - _gh_kwh_original) > 0.0001:
+        COUNTRIES[gh_country]["kwh"] = gh_kwh_override
     if _gh_mix_valid:
         gh_r = _run_multicrop_generic(gh_inputs, _gh_crop_mix,
                                        calculate_greenhouse, _gh_crop_data_dict)
     else:
         gh_r = calculate_greenhouse(gh_inputs)
+    COUNTRIES[gh_country]["kwh"] = _gh_kwh_original  # always restore
 
     # ── Climate profile display ─────────────────────────────────────────────────
     _gh_active2 = st.session_state.get("active_farm")
@@ -3196,6 +3381,88 @@ elif modality == "🌿 High-Tech Greenhouse":
             f"Natural DLI coverage for {gh_crop}: {_gh_nat_frac2*100:.0f}% "
             f"({'supplemental lighting required' if _gh_nat_frac2 < 1.0 else 'no supplemental lighting required'})"
         )
+
+    # ── Data Sources panel ───────────────────────────────────────────────────
+    _gh_has_climate  = bool(st.session_state.get("active_farm", {}).get("mean_annual_dli"))
+    _gh_active_data  = st.session_state.get("active_farm") or {}
+    with st.expander("ℹ️ Data sources & calculation transparency", expanded=False):
+        _gdi1, _gdi2 = st.columns(2)
+        with _gdi1:
+            st.markdown("**📡 Automatic — from Open-Meteo Archive API**")
+            if _gh_has_climate:
+                _gh_dli2  = _gh_active_data.get("mean_annual_dli", 0)
+                _gh_temp2 = _gh_active_data.get("ambient_temp_annual", 0)
+                _gh_nat2  = compute_natural_dli_fraction(_gh_dli2, gh_crop_data["dli"])
+                st.markdown(
+                    f"- **Mean annual DLI: {_gh_dli2:.1f} mol/m²/day** "
+                    f"— determines natural DLI fraction ({_gh_nat2*100:.0f}% for {gh_crop}). "
+                    f"Supplemental lighting kWh scales with the shortfall from crop DLI requirement.\n"
+                    f"- **Ambient temperature: {_gh_temp2:.1f}°C** "
+                    f"— directly drives heating energy. ΔT = target − {_gh_temp2:.1f}°C. "
+                    f"A colder location increases heating OPEX automatically.\n"
+                    f"- Source: Open-Meteo 10-year historical archive. Stored in Supabase at farm save time."
+                )
+            else:
+                st.markdown(
+                    "- ⚠️ **No climate data available** for this farm.\n"
+                    "- Set coordinates in the **Farm Intelligence Map**, then re-save the farm profile.\n"
+                    "- Until then, heating energy uses a generic temperate climate assumption "
+                    "and supplemental lighting is based on crop's built-in natural DLI fraction."
+                )
+        with _gdi2:
+            st.markdown("**🎛️ Manual inputs — set in this calculator**")
+            st.markdown(
+                "- Crop → auto-selects structure type (Polytunnel / Multi-span / Venlo) "
+                "and base natural DLI fraction. See Assumptions §11.\n"
+                "- Country → electricity price (IEA/Eurostat, see §5)\n"
+                "- Footprint, automation, price scenario\n"
+                "- All financial structure inputs (see §17.7)"
+            )
+        st.caption(
+            "ℹ️ GH heating formula: ΔT × 10 W/m²/°C × footprint × 8,760 hrs ÷ 1,000. "
+            "Supplemental lighting: (crop DLI − natural DLI) × 0.0216 kWh/mol × operating days. "
+            "Full derivation in Assumptions §11.2."
+        )
+
+
+    # ── Energy & Labour calibration callout ──────────────────────────────────
+    _el_r2    = get_rates_for_country_name(gh_inputs["country"])
+    _el_e2    = _el_r2["energy"]
+    _el_l2    = _el_r2["labour"]
+    _mkwh2    = COUNTRIES.get(gh_inputs["country"], {}).get("kwh", 0)
+    _mlabour2 = COUNTRIES.get(gh_inputs["country"], {}).get("labour", 0)
+    if _el_r2["iso"]:
+        _e_flag  = abs(_el_e2["industrial"] - _mkwh2) > 0.01
+        _l_flag  = abs(_el_l2["industrial_loaded"] - _mlabour2) > 3.0
+        _exp_lbl = "⚠️ Verify your input assumptions" if (_e_flag or _l_flag) else "✅ Input assumptions cross-check"
+        with st.expander(_exp_lbl, expanded=(_e_flag or _l_flag)):
+            _rc1, _rc2 = st.columns(2)
+            with _rc1:
+                st.markdown("**⚡ Electricity**")
+                _e_dir = "higher" if _el_e2["industrial"] > _mkwh2 else "lower"
+                _e_pct = abs(_el_e2["industrial"] - _mkwh2) / _mkwh2 * 100 if _mkwh2 else 0
+                if _e_flag:
+                    st.warning(
+                        f"Reference industrial rate: **${_el_e2['industrial']:.3f}/kWh** "
+                        f"({_e_pct:.0f}% {_e_dir} than model’s ${_mkwh2:.3f}/kWh). "
+                        f"Verify country default or use a site-specific override if your tariff differs."
+                    )
+                else:
+                    st.success(f"Model electricity (${_mkwh2:.3f}/kWh) aligns with reference industrial rate (${_el_e2['industrial']:.3f}/kWh).")
+                st.caption(f"Source: {_el_e2['source']}" + (f" · ⚡ {_el_e2['live_note']}" if _el_e2.get("live") else ""))
+            with _rc2:
+                st.markdown("**👷 Labour**")
+                _l_dir = "higher" if _el_l2["industrial_loaded"] > _mlabour2 else "lower"
+                _l_pct = abs(_el_l2["industrial_loaded"] - _mlabour2) / _mlabour2 * 100 if _mlabour2 else 0
+                if _l_flag:
+                    st.warning(
+                        f"Reference fully-loaded industrial: **${_el_l2['industrial_loaded']:.0f}/hr** "
+                        f"({_l_pct:.0f}% {_l_dir} than model’s ${_mlabour2:.0f}/hr). "
+                        f"Overhead {_el_l2['overhead_pct']} applied (base ${_el_l2['industrial_base']:.0f}/hr)."
+                    )
+                else:
+                    st.success(f"Model labour (${_mlabour2:.0f}/hr) aligns with reference (${_el_l2['industrial_loaded']:.0f}/hr, overhead {_el_l2['overhead_pct']}).")
+                st.caption(f"Source: {_el_l2['source']}")
 
     # ── Key metrics ───────────────────────────────────────────────────────────
     # ── PDF Report ────────────────────────────────────────────────────────────
@@ -3843,6 +4110,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         "aq_net_grow_factor":       90.0,
         "aq_walkways_factor":       10.0,
         "aq_water_price":           2.0,
+        "aq_kwh_override":          0.0,
         "aq_rent_monthly":          0.0,
         "aq_real_estate_capex":     0.0,
         "aq_depreciation_years":    15,
@@ -3876,6 +4144,28 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         aq_country = st.selectbox("Country", aq_country_list,
             index=aq_country_list.index(st.session_state["aq_country"]) if st.session_state["aq_country"] in aq_country_list else 0,
             key="aq_country")
+
+        # ── Energy & Labour reference rates (energy_labour module) ────────────
+        _el_rates  = get_rates_for_country_name(aq_country)
+        _el_e      = _el_rates["energy"]
+        _el_l      = _el_rates["labour"]
+        _model_kwh = COUNTRIES.get(aq_country, {}).get("kwh", 0)
+        if _el_rates["iso"]:
+            _el_delta = _el_e["industrial"] - _model_kwh
+            _el_arrow = "▲" if _el_delta > 0.005 else ("▼" if _el_delta < -0.005 else "≈")
+            _el_col   = "#d97706" if _el_delta > 0.005 else ("#16a34a" if _el_delta < -0.005 else "#6b7280")
+            _el_live  = " · ⚡ Live" if _el_e.get("live") else ""
+            _el_html  = (
+                f"<div style='font-size:11px;color:#6b7280;margin:-4px 0 8px 0;"
+                f"padding:6px 8px;background:#f8f9fa;border-radius:4px;"
+                f"border-left:3px solid {_el_col};'>"
+                f"<b>Ref. rates ({_el_rates['iso']})</b> &nbsp;&middot;&nbsp; "
+                f"Electricity industrial: <b style='color:{_el_col};'>${_el_e['industrial']:.3f}/kWh {_el_arrow}</b> "
+                f"<span style='color:#9ca3af;'>(model ${_model_kwh:.3f})</span>"
+                f"&nbsp;&middot;&nbsp; Labour: <b>${_el_l['industrial_loaded']:.0f}/hr</b>"
+                f"{_el_live}</div>"
+            )
+            st.markdown(_el_html, unsafe_allow_html=True)
 
         aq_plant_crop_source = st.radio("Crop source", ["Greenhouse", "Polytunnel"],
             index=0 if st.session_state["aq_plant_crop_source"] == "Greenhouse" else 1,
@@ -4019,6 +4309,17 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         aq_net_grow_factor   = st.number_input("Net grow factor (%)", value=st.session_state["aq_net_grow_factor"], step=1.0, min_value=1.0, max_value=100.0, key="aq_net_grow_factor")
         aq_walkways_factor   = st.number_input("Walkways factor (%)", value=st.session_state["aq_walkways_factor"], step=1.0, min_value=0.0, max_value=50.0, key="aq_walkways_factor")
         aq_water_price       = st.number_input("Water price ($/m³)", value=st.session_state["aq_water_price"], step=0.1, min_value=0.0, key="aq_water_price")
+        _aq_kwh_default      = COUNTRIES.get(aq_country, {}).get("kwh", 0.0)
+        aq_kwh_override      = st.number_input(
+            "Electricity price ($/kWh)",
+            value=float(st.session_state.get("aq_kwh_override") or _aq_kwh_default),
+            step=0.005, min_value=0.001, format="%.4f", key="aq_kwh_override",
+            help=(
+                f"Country default: ${_aq_kwh_default:.4f}/kWh. "
+                "Override with your actual site tariff. "
+                "Industrial rate is typically 30–60% lower than residential."
+            )
+        )
         aq_rent_monthly      = st.number_input("Monthly rent ($)", value=st.session_state["aq_rent_monthly"], step=100.0, min_value=0.0, key="aq_rent_monthly")
         aq_real_estate_capex = st.number_input("Real estate CAPEX ($)", value=st.session_state["aq_real_estate_capex"], step=10000.0, min_value=0.0, key="aq_real_estate_capex")
 
@@ -4086,6 +4387,11 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     _aq_plant_dict = POLYTUNNEL_CROPS if aq_inputs.get("plant_crop_source") == "polytunnel" else GREENHOUSE_CROPS
 
     # Define plant-side inputs for sensitivity analysis
+    # Apply electricity price override
+    _aq_kwh_original = COUNTRIES[aq_country]["kwh"]
+    if abs(aq_kwh_override - _aq_kwh_original) > 0.0001:
+        COUNTRIES[aq_country]["kwh"] = aq_kwh_override
+
     _aq_plant_sens_inputs = {
         "country": aq_inputs["country"], "crop": aq_inputs["plant_crop"],
         "crop_source": aq_inputs.get("plant_crop_source","greenhouse"),
@@ -4191,6 +4497,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         aq_r["_crop_results"]     = _aq_plant_r.get("_crop_results", [])
     else:
         aq_r = calculate_aquaponics(aq_inputs)
+    COUNTRIES[aq_country]["kwh"] = _aq_kwh_original  # always restore
 
     _pr  = aq_r["plant"]
     _fr  = aq_r["fish"]
@@ -4206,6 +4513,147 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             + (f" · Mean annual DLI: {_aq_farm_active['mean_annual_dli']:.1f} mol/m²/day"
                if _aq_farm_active.get("mean_annual_dli") else "")
         )
+
+    # ── Data Sources panel ───────────────────────────────────────────────────
+    _aq_has_climate  = bool(st.session_state.get("active_farm", {}).get("ambient_temp_annual"))
+    _aq_active_data  = st.session_state.get("active_farm") or {}
+    with st.expander("ℹ️ Data sources & calculation transparency", expanded=False):
+        _aqi1, _aqi2 = st.columns(2)
+        with _aqi1:
+            st.markdown("**📡 Automatic — from Open-Meteo Archive API**")
+            if _aq_has_climate:
+                _aq_temp2 = _aq_active_data.get("ambient_temp_annual", 0)
+                _aq_dli2  = _aq_active_data.get("mean_annual_dli")
+                _aq_spec  = aq_inputs.get("fish_species", "Tilapia (Nile)")
+                _aq_tgt   = aq_inputs.get("fish_target_temp", 25)
+                _aq_dt    = max(0, _aq_tgt - _aq_temp2)
+                st.markdown(
+                    f"- **Ambient temperature: {_aq_temp2:.1f}°C** "
+                    f"— fish tank heating ΔT = max(0, {_aq_tgt}°C target − {_aq_temp2:.1f}°C ambient) = **{_aq_dt:.1f}°C**. "
+                    f"Heating energy = 10 W/m³ × tank volume × 8,760 hrs ÷ 1,000 × (ΔT ÷ 15). "
+                    f"See Assumptions §12.2.\n"
+                    + (f"- **Mean annual DLI: {_aq_dli2:.1f} mol/m²/day** "
+                       f"— drives plant zone supplemental lighting energy. See Assumptions §11.2.\n"
+                       if _aq_dli2 else "- Mean annual DLI: not available for this farm.\n")
+                    + "- Source: Open-Meteo 10-year historical archive. Stored in Supabase at farm save time."
+                )
+            else:
+                st.markdown(
+                    "- ⚠️ **No climate data available** for this farm.\n"
+                    "- Set coordinates in the **Farm Intelligence Map**, then re-save the farm profile.\n"
+                    "- Until then, fish heating uses country-level ambient temperature fallback (see Assumptions §14)."
+                )
+        with _aqi2:
+            st.markdown("**🎛️ Manual inputs — set in this calculator**")
+            st.markdown(
+                "- Fish species → target water temperature, O₂ demand, water exchange rate, grow cycle\n"
+                "- Tank volume, system mode (coupled / decoupled)\n"
+                "- Coupled: yield multiplier (default 0.88), near-zero nutrient cost (5%)\n"
+                "- Decoupled: 60% nutrient offset from fish effluent\n"
+                "- Country → electricity price. See Assumptions §12 and §13 for full detail."
+            )
+        st.caption(
+            "ℹ️ Fish heating: 10 W/m³ × tank_vol × 8,760 hrs ÷ 1,000 × (ΔT ÷ 15). "
+            "Fish aeration: base kWh/kg × O₂ scale factor × annual kg fish. "
+            "Full model in Assumptions §12."
+        )
+
+
+    # ── Energy & Labour calibration callout ──────────────────────────────────
+    _el_r2    = get_rates_for_country_name(aq_inputs["country"])
+    _el_e2    = _el_r2["energy"]
+    _el_l2    = _el_r2["labour"]
+    _mkwh2    = COUNTRIES.get(aq_inputs["country"], {}).get("kwh", 0)
+    _mlabour2 = COUNTRIES.get(aq_inputs["country"], {}).get("labour", 0)
+    if _el_r2["iso"]:
+        _e_diff   = abs(_el_e2["industrial"] - _mkwh2)
+        _l_diff   = abs(_el_l2["industrial_loaded"] - _mlabour2)
+        _e_flag   = _e_diff > 0.01
+        _l_flag   = _l_diff > 3.0
+        _exp_label = (
+            "⚠️ Verify your input assumptions"
+            if (_e_flag or _l_flag) else
+            "✅ Input assumptions cross-check"
+        )
+        with st.expander(_exp_label, expanded=(_e_flag or _l_flag)):
+            _rc1, _rc2 = st.columns(2)
+            with _rc1:
+                st.markdown("**⚡ Electricity**")
+                _e_arrow = "higher" if _el_e2["industrial"] > _mkwh2 else "lower"
+                _e_pct   = abs(_el_e2["industrial"] - _mkwh2) / _mkwh2 * 100 if _mkwh2 else 0
+                if _e_flag:
+                    st.warning(
+                        f"Reference industrial rate: **${_el_e2['industrial']:.3f}/kWh** "
+                        f"({_e_pct:.0f}% {_e_arrow} than model's ${_mkwh2:.3f}/kWh). "
+                        f"If your actual tariff differs, update the electricity price "
+                        f"in the country table or use a price override."
+                    )
+                else:
+                    st.success(
+                        f"Model electricity price (${_mkwh2:.3f}/kWh) aligns with "
+                        f"reference industrial rate (${_el_e2['industrial']:.3f}/kWh)."
+                    )
+                if _el_e2.get("live"):
+                    st.caption(f"⚡ {_el_e2['live_note']}")
+                else:
+                    st.caption(f"Source: {_el_e2['source']} — static 2023–24 data")
+            with _rc2:
+                st.markdown("**👷 Labour**")
+                _l_arrow = "higher" if _el_l2["industrial_loaded"] > _mlabour2 else "lower"
+                _l_pct   = abs(_el_l2["industrial_loaded"] - _mlabour2) / _mlabour2 * 100 if _mlabour2 else 0
+                if _l_flag:
+                    st.warning(
+                        f"Reference fully-loaded industrial rate: **${_el_l2['industrial_loaded']:.0f}/hr** "
+                        f"({_l_pct:.0f}% {_l_arrow} than model's ${_mlabour2:.0f}/hr). "
+                        f"Overhead multiplier applied: {_el_l2['overhead_pct']} "
+                        f"(base ${_el_l2['industrial_base']:.0f}/hr × {_el_l2['overhead']:.2f})."
+                    )
+                else:
+                    st.success(
+                        f"Model labour rate (${_mlabour2:.0f}/hr) aligns with "
+                        f"reference (${_el_l2['industrial_loaded']:.0f}/hr, overhead {_el_l2['overhead_pct']})."
+                    )
+                st.caption(f"Source: {_el_l2['source']}")
+
+
+    # ── Energy & Labour calibration callout ──────────────────────────────────
+    _el_r2    = get_rates_for_country_name(aq_inputs["country"])
+    _el_e2    = _el_r2["energy"]
+    _el_l2    = _el_r2["labour"]
+    _mkwh2    = COUNTRIES.get(aq_inputs["country"], {}).get("kwh", 0)
+    _mlabour2 = COUNTRIES.get(aq_inputs["country"], {}).get("labour", 0)
+    if _el_r2["iso"]:
+        _e_flag  = abs(_el_e2["industrial"] - _mkwh2) > 0.01
+        _l_flag  = abs(_el_l2["industrial_loaded"] - _mlabour2) > 3.0
+        _exp_lbl = "⚠️ Verify your input assumptions" if (_e_flag or _l_flag) else "✅ Input assumptions cross-check"
+        with st.expander(_exp_lbl, expanded=(_e_flag or _l_flag)):
+            _rc1, _rc2 = st.columns(2)
+            with _rc1:
+                st.markdown("**⚡ Electricity**")
+                _e_dir = "higher" if _el_e2["industrial"] > _mkwh2 else "lower"
+                _e_pct = abs(_el_e2["industrial"] - _mkwh2) / _mkwh2 * 100 if _mkwh2 else 0
+                if _e_flag:
+                    st.warning(
+                        f"Reference industrial rate: **${_el_e2['industrial']:.3f}/kWh** "
+                        f"({_e_pct:.0f}% {_e_dir} than model’s ${_mkwh2:.3f}/kWh). "
+                        f"Verify country default or use a site-specific override if your tariff differs."
+                    )
+                else:
+                    st.success(f"Model electricity (${_mkwh2:.3f}/kWh) aligns with reference industrial rate (${_el_e2['industrial']:.3f}/kWh).")
+                st.caption(f"Source: {_el_e2['source']}" + (f" · ⚡ {_el_e2['live_note']}" if _el_e2.get("live") else ""))
+            with _rc2:
+                st.markdown("**👷 Labour**")
+                _l_dir = "higher" if _el_l2["industrial_loaded"] > _mlabour2 else "lower"
+                _l_pct = abs(_el_l2["industrial_loaded"] - _mlabour2) / _mlabour2 * 100 if _mlabour2 else 0
+                if _l_flag:
+                    st.warning(
+                        f"Reference fully-loaded industrial: **${_el_l2['industrial_loaded']:.0f}/hr** "
+                        f"({_l_pct:.0f}% {_l_dir} than model’s ${_mlabour2:.0f}/hr). "
+                        f"Overhead {_el_l2['overhead_pct']} applied (base ${_el_l2['industrial_base']:.0f}/hr)."
+                    )
+                else:
+                    st.success(f"Model labour (${_mlabour2:.0f}/hr) aligns with reference (${_el_l2['industrial_loaded']:.0f}/hr, overhead {_el_l2['overhead_pct']}).")
+                st.caption(f"Source: {_el_l2['source']}")
 
     if aq_r.get("salmon_warning"):
         st.warning(aq_r["salmon_warning"])

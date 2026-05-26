@@ -269,9 +269,37 @@ st.markdown("""
 - **Multi-harvest financial projections** for 2H and 3H crops have been validated at the
   production level but the interaction with labour and energy costs under extended cycle conditions
   should be verified against actual operator data before use in investment decisions.
+
+- **VF HVAC tier is manual, not climate-derived.** The Vertical Farm model uses `ambient_temp_annual`
+  from the Open-Meteo API to *suggest* an appropriate HVAC tier in the ROI Calculator UI, but the
+  value does not directly enter the energy formula. The HVAC selectbox controls a multiplier on
+  total energy (1.70× / 1.83× / 2.025×). Users must verify that their selected tier reflects both
+  the ambient climate severity *and* the actual insulation and HVAC specification of the facility.
+
+- **Greenhouse and Aquaponics models use live climate data directly** for heating and lighting
+  calculations. Annual mean temperature understates seasonal peak heating load. Treat results as
+  a lower bound for cold-climate operations or cold-water fish species combinations.
+
+- **Farm Intelligence Map data quality** varies by geography. Northern and Central Europe OSM
+  industrial coverage is generally comprehensive. Southern and Eastern Europe, Middle East, and
+  parts of Asia have variable coverage. Always cross-check critical facility findings independently.
 """)
 
 # ─────────────────────────────────────────────────────────────────────────────
+st.divider()
+st.header("10. References")
+st.markdown("""
+- Cornell University Controlled Environment Agriculture Program (2019). *Cornell CEA Lettuce Handbook*.
+- Eurostat. *Hourly Labour Costs Statistics*. European Commission.
+- European Commission (DG AGRI). *Agri-food Market Price Data Portal*.
+- German Federal Ministry of Food and Agriculture (BMEL). *Fruit and Vegetable Market Reporting System*.
+- International Labour Organization. *ILOSTAT Database*. ILO.
+- Postel, S. L., et al. (2015). Water use efficiency in food production. *PNAS*, 112(30), 9141–9146.
+- van Delden, S. H., et al. (2020). Growth of leafy greens under varying light intensities. *Wageningen University & Research*.
+- Zhang, X., et al. (2024). Life cycle assessment of indoor vertical farming systems. *Journal of Cleaner Production*, Elsevier.
+- MDPI Sustainability (2020). LED lighting efficacy in controlled-environment agriculture.
+""")
+
 st.divider()
 st.header("11. Greenhouse & Polytunnel Model")
 st.markdown("""
@@ -765,20 +793,6 @@ This directly affects both energy OPEX and lighting CAPEX.
    lighting — location DLI is irrelevant and not applied to the VF calculation engine.
 """)
 
-st.divider()
-st.header("10. References")
-st.markdown("""
-- Cornell University Controlled Environment Agriculture Program (2019). *Cornell CEA Lettuce Handbook*.
-- Eurostat. *Hourly Labour Costs Statistics*. European Commission.
-- European Commission (DG AGRI). *Agri-food Market Price Data Portal*.
-- German Federal Ministry of Food and Agriculture (BMEL). *Fruit and Vegetable Market Reporting System*.
-- International Labour Organization. *ILOSTAT Database*. ILO.
-- Postel, S. L., et al. (2015). Water use efficiency in food production. *PNAS*, 112(30), 9141–9146.
-- van Delden, S. H., et al. (2020). Growth of leafy greens under varying light intensities. *Wageningen University & Research*.
-- Zhang, X., et al. (2024). Life cycle assessment of indoor vertical farming systems. *Journal of Cleaner Production*, Elsevier.
-- MDPI Sustainability (2020). LED lighting efficacy in controlled-environment agriculture.
-""")
-
 # ─────────────────────────────────────────────────────────────────────────────
 st.header("15. Weather Integration & HVAC Cost Estimation")
 st.markdown("""
@@ -1017,6 +1031,184 @@ Country-level electricity prices ($/kWh) are the single most important model par
 - **Price tier used:** Commercial/industrial rate (non-household), which is appropriate for CEA operations. Residential rates are typically 30–60% higher in Europe and are not used.
 
 A note on energy as the critical viability threshold: at European commercial electricity prices (€0.15–0.28/kWh as of 2024), energy cost alone frequently exceeds the wholesale value of commodity crops in fully artificial lighting systems. The portal's structural viability indicator (energy cost as % of revenue) is the fastest diagnostic for whether a given crop × country × modality combination is economically rational. This is the core design insight the platform was built around.
+""")
+
+# ─────────────────────────────────────────────────────────────────────────────
+st.divider()
+st.header("18. Farm Intelligence Map")
+st.markdown("""
+The Farm Intelligence Map is a spatial intelligence layer that enriches the farm investment
+decision with location-specific data sourced entirely from free, open APIs — no API key required
+for core functionality.
+
+---
+
+### 18.1 Purpose & Workflow Position
+
+The Farm Intelligence Map sits at the centre of the data workflow:
+
+```
+Farm Intelligence Map
+  → Sets farm coordinates (lat/lon)
+  → Climate fetch triggered at farm save
+  → ambient_temp_annual + mean_annual_dli stored in Supabase
+  → ROI Calculator reads these values for heating and lighting calculations
+  → Harvest Tracker reads coordinates for 7-day weather forecast
+```
+
+This means **placing a pin on the Farm Intelligence Map is the action that activates
+location-specific calculations across the entire platform**. A farm profile without
+coordinates uses static country-level fallbacks for all climate inputs.
+
+---
+
+### 18.2 Data Sources
+
+#### OpenStreetMap via Overpass API
+- **URL:** `https://overpass-api.de/api/interpreter` (with failover mirrors)
+- **Auth:** None required. Free public API.
+- **What it returns:** Geographic features matching structured tag queries within a radius.
+- **Used for:** Waste Sources layer (Layer 1) and Logistics Infrastructure layer (Layer 2).
+- **Timeout:** 90 seconds. Large radius queries (>50 km) in dense urban areas may time out.
+
+#### Nominatim (OpenStreetMap Geocoding)
+- **URL:** `https://nominatim.openstreetmap.org/reverse`
+- **Auth:** None required. Rate limit: 1 request/second.
+- **Used for:** Reverse geocoding a clicked map coordinate to country name and ISO code,
+  enabling automatic country pre-fill when creating a farm profile from the map.
+
+#### ipapi.co
+- **URL:** `https://ipapi.co/json/`
+- **Auth:** None required for low-volume usage.
+- **Used for:** Detecting the user's approximate location on first map load to set the default
+  map centre. Falls back to Milan (45.46°N, 9.19°E) if the request fails.
+
+#### OpenRouteService (ORS) — optional, requires API key
+- **URL:** `https://api.openrouteservice.org/v2/matrix/driving-car`
+- **Auth:** API key in `st.secrets["ORS_API_KEY"]` (free tier: 2,000 matrix calls/day).
+- **Register:** https://openrouteservice.org/dev/#/login
+- **Used for:** Road distance routing for priority logistics infrastructure (airports,
+  ports, motorway junctions, rail terminals, cold storage).
+- **Fallback:** If `ORS_API_KEY` is absent or the call fails, straight-line Haversine
+  distances are used silently. The `Routing` column in results shows `ORS (Road)` or
+  `Haversine (Direct)` accordingly.
+
+---
+
+### 18.3 Layer 1 — Circular Economy / Waste Sources
+
+**What it does:** Finds industrial facilities within the search radius that are potential
+sources of organic waste with fertiliser value for aquaponics or composting.
+
+**OSM tags queried:** `landuse=industrial`, `industrial=*`, `man_made=works`,
+`man_made=wastewater_plant`, `craft=*` (brewery, dairy, slaughterhouse, sawmill, etc.).
+
+**Classification logic (two-pass):**
+1. Direct tag match against `TAG_WASTE_MAP` (e.g. `craft=brewery` → Spent Grains)
+2. Name/tag keyword scan against `NAME_KEYWORD_MAP` (e.g. "birrificio" → Brewery)
+3. Fallback: `Unknown / Other`
+
+**NPK scoring:** Each waste stream is scored 0–9 for Nitrogen, Phosphorus, and Potassium
+value based on published organic amendment literature. These scores are relative rankings,
+not precise agronomic concentrations.
+
+| Waste Stream | N | P | K | Label |
+|---|---|---|---|---|
+| Blood Meal / Bone Meal | 9 | 7 | 1 | High N+P |
+| High Nitrogen Manure (Poultry) | 9 | 5 | 4 | High N |
+| Fish Emulsion / Bone Meal | 8 | 6 | 2 | High N+P |
+| Fermentation Biomass | 7 | 3 | 2 | High N |
+| Whey / Sludge | 7 | 6 | 2 | High N+P |
+| Digestate / Compost | 5 | 4 | 5 | Balanced |
+| Wood Ash / Biochar | 0 | 2 | 7 | High K |
+
+**Known limitation:** OSM industrial data quality varies significantly by country and
+region. Northern Europe (NL, DE, AT) is densely mapped; Southern and Eastern Europe
+has more gaps. Results should be treated as indicative, not exhaustive.
+
+---
+
+### 18.4 Layer 2 — Logistics Infrastructure
+
+**What it does:** Finds transport and logistics infrastructure within the search radius
+and computes a composite Logistics Score.
+
+**Infrastructure types and OSM tags:**
+
+| Type | OSM tag | Priority | Colour |
+|---|---|---|---|
+| Airport | `aeroway=aerodrome` | 1 | Purple |
+| Rail Freight Terminal | `railway=freight_terminal` | 1 | Dark amber |
+| Commercial Port | `landuse=port` | 1 | Navy |
+| Motorway Junction | `highway=motorway_junction` | 1 | Red |
+| Cold Storage | `industrial=cold_storage` | 1 | Green |
+| Ferry Terminal | `amenity=ferry_terminal` | 2 | Cyan |
+| Rail Station | `railway=station` | 2 | Orange |
+| Harbour / Port | `harbour=*` | 2 | Blue |
+| Motorway | `highway=motorway` | 1 | Dark red |
+| Trunk Road | `highway=trunk` | 2 | Light red |
+| Warehouse | `building=warehouse` | 4 | Olive |
+| Fuel Station (HGV) | `amenity=fuel` | 4 | Yellow |
+| Industrial Zone | `landuse=industrial` | 4 | Grey |
+
+**Logistics Score formula:**
+```
+Score = sum of weights for each infrastructure type present (capped at 100)
+```
+| Type | Weight |
+|---|---|
+| Motorway Junction | 25 |
+| Rail Freight Terminal | 20 |
+| Commercial Port | 20 |
+| Airport | 15 |
+| Cold Storage | 15 |
+| Rail Station / Harbour | 10 each |
+| Ferry / Warehouse / Trunk / Rail Yard | 5 each |
+
+This score is a **presence indicator**, not a capacity or throughput measure.
+A score ≥60 indicates strong multi-modal logistics access; <35 indicates limited infrastructure.
+
+**Nearest Key Infrastructure panel:** Shows the straight-line (or road) distance to the
+nearest instance of 7 priority categories (Airport, Port, Motorway, Rail, Cold Storage,
+Fuel, Ferry) regardless of the active filter settings.
+
+---
+
+### 18.5 Location Suitability Finder (Reverse Search)
+
+**What it does:** Inverts the search logic. Instead of "what's near my farm?",
+the user defines up to 3 reference infrastructure points and maximum distances.
+The map draws coverage circles around each located target — the visual overlap
+of circles identifies candidate zones that satisfy all proximity constraints simultaneously.
+
+**Triangulation logic:**
+1. Check existing loaded DataFrames first (no API call if target already in results)
+2. If not found locally, run a targeted Overpass query for the specific infrastructure type
+   within the global search radius
+3. Return the closest match; draw a circle of the user-specified proximity radius
+
+**Use case example:** A user sets Target 1 = Motorway Junction (≤15 km), Target 2 =
+Cold Storage (≤20 km), Target 3 = Brewery (≤10 km). The overlapping area on the map
+identifies candidate farm locations satisfying all three constraints.
+
+---
+
+### 18.6 Data Persistence
+
+Intelligence Map search results can be saved to the farm profile's `metadata` JSONB column
+in Supabase. On the next page load with the same active farm, results are rehydrated
+automatically from the database — no re-search required.
+
+**Saved keys in `metadata`:**
+- `fim_waste_data` — list of dicts (waste layer DataFrame as records)
+- `fim_logistics_data` — list of dicts (logistics layer DataFrame as records)
+
+Clicking "💾 Save / Overwrite to Database" overwrites both keys. Clicking "🗑️ Clear Saved Data"
+removes them from the metadata without affecting any other farm data.
+
+**Important:** Saved data reflects the search radius and date at time of save. Infrastructure
+changes in OSM or facility openings/closures are not automatically refreshed. Re-run the search
+periodically for operational farms.
 """)
 
 # ─────────────────────────────────────────────────────────────────────────────
