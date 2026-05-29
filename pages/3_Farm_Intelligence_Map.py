@@ -1139,7 +1139,7 @@ legend_html = ""
 if layer_waste and waste_cached is not None and not waste_cached.empty: # Keep emojis in legend
     for ind in sorted(waste_cached["Predicted Industry"].unique()):
         c = INDUSTRY_COLORS.get(ind, "#505050")
-        legend_html += f'<span style="margin-right:14px;white-space:nowrap;"><span style="color:{c};font-size:16px;">●</span> ♻️ {ind}</span> # Keep emoji in legend
+        legend_html += f'<span style="margin-right:14px;white-space:nowrap;"><span style="color:{c};font-size:16px;">●</span> ♻️ {ind}</span>' # Keep emoji in legend
 if layer_logistics and logistics_cached is not None and not logistics_cached.empty:
     for t in sorted(logistics_cached["Type"].unique()):
         c = COLOUR_BY_LABEL.get(t, "#969696")
