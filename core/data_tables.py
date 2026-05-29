@@ -269,4 +269,46 @@ CROPS = {
     "Mushrooms - Enoki":                  {"yield": 8,   "cycle": 40,  "seed": 3.5,  "substrate": 23.256, "ec": 1.2, "water": 20,  "nutrient": 0.005, "price_base": 3.8,  "price_low": 3,   "price_high": 5.5,  "dli": 0,  "harvest_mult": 2.9,  "wf": 0.93, "tr": 21, "days_between": 0,  "yield_h2": 0,    "yield_h3": 0},
     "Mushrooms - Nameko":                 {"yield": 8,   "cycle": 60,  "seed": 3.5,  "substrate": 23.256, "ec": 1.2, "water": 20,  "nutrient": 0.005, "price_base": 4.8,  "price_low": 3.8, "price_high": 6.8,  "dli": 0,  "harvest_mult": 3,    "wf": 0.9,  "tr": 30, "days_between": 0,  "yield_h2": 0,    "yield_h3": 0},
     "Mushrooms - Maitake":                {"yield": 8,   "cycle": 60,  "seed": 3.5,  "substrate": 23.256, "ec": 1.2, "water": 20,  "nutrient": 0.005, "price_base": 6,    "price_low": 4.5, "price_high": 8.5,  "dli": 0,  "harvest_mult": 3.2,  "wf": 0.9,  "tr": 30, "days_between": 0,  "yield_h2": 0,    "yield_h3": 0},
+    "Saffron Crocus (Micro-forcing)": {
+        "yield": 0.05, "cycle": 90, "seed": 18.50, "substrate": 1.20,
+        "ec": 1.8, "water": 15.0, "nutrient": 0.005,
+        "price_base": 8000.0, "price_low": 5000.0, "price_high": 12000.0,
+        "dli": 12.0, "harvest_mult": 1.0, "wf": 0.90, "tr": 250.0,
+        "days_between": 0, "yield_h2": 0.0, "yield_h3": 0.0
+    },
+    "Cannabis (Medicinal Elite Clones)": {
+        "yield": 2.40, "cycle": 70, "seed": 12.50, "substrate": 4.50,
+        "ec": 2.2, "water": 85.0, "nutrient": 0.005,
+        "price_base": 2500.0, "price_low": 1800.0, "price_high": 3500.0,
+        "dli": 35.0, "harvest_mult": 1.0, "wf": 0.85, "tr": 320.0,
+        "days_between": 0, "yield_h2": 0.0, "yield_h3": 0.0
+    },
+    "Wasabi (Premium Leaf & Petioles)": {
+        "yield": 1.80, "cycle": 45, "seed": 6.00, "substrate": 2.20,
+        "ec": 1.4, "water": 40.0, "nutrient": 0.005,
+        "price_base": 95.0, "price_low": 65.0, "price_high": 140.0,
+        "dli": 10.0, "harvest_mult": 1.3, "wf": 0.92, "tr": 180.0,
+        "days_between": 15, "yield_h2": 0.85, "yield_h3": 0.70
+    },
+    "Lion's Mane Mushroom": {
+        "yield": 14.50, "cycle": 35, "seed": 0.0, "substrate": 9.50,
+        "ec": 0.0, "water": 12.0, "nutrient": 0.0,
+        "price_base": 45.0, "price_low": 30.0, "price_high": 65.0,
+        "dli": 0.0, "harvest_mult": 1.6, "wf": 0.20, "tr": 0.0,
+        "days_between": 14, "yield_h2": 0.50, "yield_h3": 0.25
+    },
+    "Oyster Leaf (Mertensia maritima)": {
+        "yield": 0.95, "cycle": 30, "seed": 4.50, "substrate": 1.80,
+        "ec": 1.5, "water": 22.0, "nutrient": 0.005,
+        "price_base": 150.0, "price_low": 100.0, "price_high": 220.0,
+        "dli": 14.0, "harvest_mult": 1.4, "wf": 0.90, "tr": 190.0,
+        "days_between": 12, "yield_h2": 0.90, "yield_h3": 0.75
+    },
+    "Sea Asparagus / Samphire": {
+        "yield": 2.10, "cycle": 50, "seed": 2.50, "substrate": 1.50,
+        "ec": 3.5, "water": 45.0, "nutrient": 0.005,
+        "price_base": 75.0, "price_low": 50.0, "price_high": 110.0,
+        "dli": 22.0, "harvest_mult": 1.2, "wf": 0.88, "tr": 210.0,
+        "days_between": 20, "yield_h2": 0.80, "yield_h3": 0.60
+    },
 }

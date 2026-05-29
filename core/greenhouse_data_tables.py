@@ -72,6 +72,38 @@ GREENHOUSE_CROPS = {
         "wf": 65.0, "tr": 0.70, "price_low": 3.80, "price_base": 5.50, "price_high": 9.20,
         "natural_dli_fraction": 0.65, "structure_type": "venlo"
     },
+    "Wasabi Supreme (2-Year Rhizome)": {
+        "yield": 6.50, "cycle": 540, "days_between": 0,
+        "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 8.0, "ec": 1.2, "water": 450.0, "nutrient": 0.12,
+        "seed": 25.00, "substrate": 8.50, "wf": 69.2, "tr": 0.88,
+        "price_low": 180.0, "price_base": 280.0, "price_high": 420.0,
+        "natural_dli_fraction": 0.40, "structure_type": "venlo"
+    },
+    "Cannabis Flower (Greenhouse Auto-flower)": {
+        "yield": 1.65, "cycle": 90, "days_between": 0,
+        "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 30.0, "ec": 2.0, "water": 180.0, "nutrient": 0.15,
+        "seed": 15.00, "substrate": 5.20, "wf": 109.0, "tr": 0.85,
+        "price_low": 1200.0, "price_base": 1900.0, "price_high": 2600.0,
+        "natural_dli_fraction": 0.65, "structure_type": "venlo"
+    },
+    "Australian Finger Lime (Caviar Citrus)": {
+        "yield": 4.20, "cycle": 365, "days_between": 0,
+        "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 25.0, "ec": 1.6, "water": 550.0, "nutrient": 0.10,
+        "seed": 45.00, "substrate": 12.00, "wf": 130.9, "tr": 0.75,
+        "price_low": 90.0, "price_base": 160.0, "price_high": 240.0,
+        "natural_dli_fraction": 0.70, "structure_type": "venlo"
+    },
+    "Vanilla Orchid (Hand-pollinated)": {
+        "yield": 0.45, "cycle": 300, "days_between": 0,
+        "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 15.0, "ec": 1.4, "water": 380.0, "nutrient": 0.08,
+        "seed": 65.00, "substrate": 18.00, "wf": 844.4, "tr": 0.90,
+        "price_low": 350.0, "price_base": 550.0, "price_high": 850.0,
+        "natural_dli_fraction": 0.55, "structure_type": "venlo"
+    },
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -166,6 +198,22 @@ POLYTUNNEL_CROPS = {
         "wf": 150.0, "tr": 0.80, "price_low": 2.80, "price_base": 4.20, "price_high": 6.50,
         "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
     },
+    "Ginseng Root (Shaded Polytunnel)": {
+        "yield": 2.10, "cycle": 365, "days_between": 0,
+        "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 7.0, "ec": 0.0, "water": 290.0, "nutrient": 0.05,
+        "seed": 14.00, "substrate": 3.00, "wf": 138.1, "tr": 0.65,
+        "price_low": 250.0, "price_base": 450.0, "price_high": 750.0,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    "Caterpillar Fungus Mimic (Cordyceps Substrate)": {
+        "yield": 0.35, "cycle": 120, "days_between": 0,
+        "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 4.0, "ec": 0.0, "water": 45.0, "nutrient": 0.0,
+        "seed": 35.00, "substrate": 22.00, "wf": 128.5, "tr": 0.40,
+        "price_low": 4000.0, "price_base": 7000.0, "price_high": 12000.0,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -218,6 +266,20 @@ FISH_SPECIES = {
         "feed_conversion_ratio": 1.1, "fingerling_cost": 2.50, "feed_cost_per_kg": 1.95,
         "mortality_rate": 12, "protein_content": 44, "tank_type": "ras",
         "nutrient_output_per_kg_fish": 0.35, "price_low": 8.50, "price_base": 11.80, "price_high": 15.50
+    },
+    "Siberian Sturgeon": {
+        "grow_cycle_days": 730, "harvest_weight_kg": 6.5, "stocking_density": 35.0,
+        "feed_conversion_ratio": 1.35, "fingerling_cost": 18.50, "feed_cost_per_kg": 2.80,
+        "mortality_rate": 6.5, "protein_content": 45.0, "tank_type": "ras",
+        "nutrient_output_per_kg_fish": 0.42,
+        "price_low": 22.0, "price_base": 38.0, "price_high": 55.0
+    },
+    "Arctic Char": {
+        "grow_cycle_days": 410, "harvest_weight_kg": 1.8, "stocking_density": 50.0,
+        "feed_conversion_ratio": 1.15, "fingerling_cost": 3.20, "feed_cost_per_kg": 3.10,
+        "mortality_rate": 8.0, "protein_content": 48.0, "tank_type": "ras",
+        "nutrient_output_per_kg_fish": 0.49,
+        "price_low": 18.0, "price_base": 26.0, "price_high": 36.0
     },
 }
 
@@ -456,6 +518,20 @@ FISH_SYSTEM_PARAMS = {
         "min_system_volume_m3": 5.0,                     # Requires large buffering and specific hydrodynamics
         "feed_protein_requirement_pct": 45.0,            # Premium carnivore diet
         "waste_solids_per_kg_feed_g": 220.0,             # Highly digestible modern salmon feeds produce fewer solids
+    },
+    "Siberian Sturgeon": {
+        "oxygen_consumption_g_per_kg_per_hour": 0.38,
+        "water_exchange_rate_pct_per_day": 6.0,
+        "target_water_temp_c": 17.5,
+        "ammonia_sensitivity": "high",
+        "salinity_tolerance_ppt": 5.0
+    },
+    "Arctic Char": {
+        "oxygen_consumption_g_per_kg_per_hour": 0.65,
+        "water_exchange_rate_pct_per_day": 12.0,
+        "target_water_temp_c": 11.5,
+        "ammonia_sensitivity": "high",
+        "salinity_tolerance_ppt": 15.0
     },
 }
 

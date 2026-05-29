@@ -158,8 +158,16 @@ def _compute_layout_metrics(objects: list) -> dict:
         if otype == "building":
             building_area += area
         elif otype == "rack":
-            layers = int(o.get("layers") or 1)
-            canopy_area  += area * layers
+            layers    = int(o.get("layers") or 1)
+            rack_type = o.get("rackType", "standard")
+            rack_ht   = float(o.get("height") or 2.4)
+            # Wall racks: grow area = wall length × rack height
+            # Wall length = max(w, h) regardless of canvas orientation; thickness = min = 0.30m
+            if rack_type == "wall":
+                wall_len = max(w, float(o.get("h") or 0))
+                canopy_area += wall_len * rack_ht
+            else:
+                canopy_area += area * layers
             rack_footprint += area
             max_rack_levels = max(max_rack_levels, layers)
         elif otype == "path":
@@ -528,18 +536,24 @@ def garden_planner():
                         <div id="rack-desc" style="font-size:10px;color:#666;margin-bottom:8px;padding:6px;background:#0d1117;border-radius:3px;"></div>
                         <!-- Universal Rack Dimensions -->
                         <div style="display:flex;gap:8px;margin-bottom:8px;">
-                            <div style="flex:1;">
-                                <label style="font-size:11px;color:#888;display:block;">WIDTH (m)</label>
+                            <div style="flex:1;" id="wrapper-rackWidth">
+                                <label id="lbl-rackWidth" style="font-size:11px;color:#888;display:block;">WIDTH (m)</label>
                                 <input type="number" id="rackWidth" step="0.1" min="0.1" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
                             </div>
-                            <div style="flex:1;">
-                                <label style="font-size:11px;color:#888;display:block;">LENGTH (m)</label>
+                            <div style="flex:1;" id="wrapper-rackLength">
+                                <label id="lbl-rackLength" style="font-size:11px;color:#888;display:block;">LENGTH (m)</label>
                                 <input type="number" id="rackLength" step="0.1" min="0.1" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
                             </div>
                             <div style="flex:1;">
-                                <label style="font-size:11px;color:#888;display:block;">HEIGHT (m)</label>
+                                <label id="lbl-rackHeight" style="font-size:11px;color:#888;display:block;">HEIGHT (m)</label>
                                 <input type="number" id="rackHeight" step="0.1" min="0.1" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
                             </div>
+                        </div>
+                        <!-- Wall rack thickness info strip (hidden for non-wall) -->
+                        <div id="wall-thickness-strip" style="display:none;font-size:10px;color:#74c0fc;background:#0d1a2a;border:1px solid #1a3a5a;border-radius:3px;padding:5px 8px;margin-bottom:8px;">
+                            📐 Thickness fixed at <strong id="wall-thickness-val">0.30</strong> m &nbsp;·&nbsp;
+                            Grow area = <strong>Length × Height</strong> &nbsp;·&nbsp;
+                            Adjust length and height to set growing surface
                         </div>
 
                         <!-- Layers and Spacing (Applies to standard) -->
@@ -1602,9 +1616,18 @@ def garden_planner():
                     selection.spacing = 0.15;
                     selection.height  = selection.height || 2.0;
                 } else if (subtype === 'wall') {
-                    selection.layers  = 1;
-                    selection.spacing = 0.0;
-                    selection.height  = selection.height || 2.4;
+                    selection.layers        = 1;
+                    selection.spacing       = 0.0;
+                    selection.height        = selection.height || 2.4;
+                    selection.wallThickness = 0.30;   // fixed — not user-editable
+                    // Detect orientation: the SHORTER canvas dimension is the thickness.
+                    // Portrait (h > w): thickness is w, wall runs along h (Y axis — N/S wall)
+                    // Landscape (w >= h): thickness is h, wall runs along w (X axis — E/W wall)
+                    if (selection.h > selection.w) {
+                        selection.w = 0.30;  // lock X to thickness
+                    } else {
+                        selection.h = 0.30;  // lock Y to thickness
+                    }
                 } else if (subtype === 'bench') {
                     selection.layers  = 1;
                     selection.spacing = 0.0;
@@ -1625,6 +1648,55 @@ def garden_planner():
             document.getElementById('rack-layer-controls').style.display = ['standard'].includes(subtype) ? 'block' : 'none';
             document.getElementById('spacing-wrapper').style.display     = subtype === 'standard' ? 'block' : 'none';
             document.getElementById('rack-tower-controls').style.display = subtype === 'tower' ? 'block' : 'none';
+            // Wall rack: relabel inputs based on orientation, show info strip
+            const isWall = subtype === 'wall';
+            const lblW = document.getElementById('lbl-rackWidth');
+            const lblL = document.getElementById('lbl-rackLength');
+            const lblH = document.getElementById('lbl-rackHeight');
+            const wrapL = document.getElementById('wrapper-rackLength');
+            const strip = document.getElementById('wall-thickness-strip');
+            if (isWall && selection) {
+                // Portrait: wall runs N/S (along Y), X = thickness
+                // Landscape: wall runs E/W (along X), Y = thickness
+                const portrait = selection.h > selection.w;
+                if (lblW) lblW.innerText  = portrait ? 'THICKNESS (m) — fixed' : 'WALL LENGTH (m)';
+                if (lblL) lblL.innerText  = portrait ? 'WALL LENGTH (m)' : 'THICKNESS (m) — fixed';
+                // Dim the thickness axis, highlight the length axis
+                const widthInput  = document.getElementById('rackWidth');
+                const lengthInput = document.getElementById('rackLength');
+                if (portrait) {
+                    // w = thickness (locked, blue)
+                    if (widthInput)  { widthInput.value  = '0.30'; widthInput.readOnly  = true;  widthInput.style.color  = '#74c0fc'; }
+                    if (lengthInput) { lengthInput.readOnly = false; lengthInput.style.color = '#fff'; }
+                    document.getElementById('wrapper-rackWidth') && (document.getElementById('wrapper-rackWidth').style.opacity = '0.4');
+                    if (wrapL) wrapL.style.opacity = '1';
+                } else {
+                    // h = thickness (locked, blue)
+                    if (lengthInput) { lengthInput.value = '0.30'; lengthInput.readOnly = true;  lengthInput.style.color = '#74c0fc'; }
+                    if (widthInput)  { widthInput.readOnly = false; widthInput.style.color = '#fff'; }
+                    if (wrapL) wrapL.style.opacity = '0.4';
+                    document.getElementById('wrapper-rackWidth') && (document.getElementById('wrapper-rackWidth').style.opacity = '1');
+                }
+                if (lblH) lblH.innerText = 'RACK HEIGHT (m)';
+                if (strip) {
+                    strip.style.display = 'block';
+                    const thickEl = document.getElementById('wall-thickness-val');
+                    if (thickEl) thickEl.innerText = '0.30';
+                    // Update orientation hint
+                    strip.innerHTML = '&#128204; <strong>' + (portrait ? 'N/S wall (portrait)' : 'E/W wall (landscape)') + '</strong>'
+                        + ' &nbsp;&middot;&nbsp; Thickness fixed 0.30 m &nbsp;&middot;&nbsp; Grow area = <strong>Wall length &times; Height</strong>';
+                }
+            } else {
+                if (lblW) lblW.innerText  = 'WIDTH (m)';
+                if (lblL) lblL.innerText  = 'LENGTH (m)';
+                if (lblH) lblH.innerText  = 'HEIGHT (m)';
+                if (wrapL) wrapL.style.opacity = '1';
+                if (strip) strip.style.display = 'none';
+                const widthInput  = document.getElementById('rackWidth');
+                const lengthInput = document.getElementById('rackLength');
+                if (widthInput)  { widthInput.readOnly  = false; widthInput.style.color  = '#fff'; }
+                if (lengthInput) { lengthInput.readOnly = false; lengthInput.style.color = '#fff'; }
+            }
             // Update description
             const descEl = document.getElementById('rack-desc');
             if (descEl) descEl.innerText = RACK_TYPES[subtype]?.desc || '';
@@ -1680,7 +1752,12 @@ def garden_planner():
             if (!selection || selection.type !== 'rack') return;
             const layers    = selection.layers || 1;
             const layerArea = selection.w * selection.h;
-            const canopy    = layerArea * layers;
+            // Wall racks: grow area = wall length × rack height
+            // Wall length = the LONG axis (max of w/h); thickness = short axis (0.30m)
+            const wallLen   = (selection.rackType === 'wall') ? Math.max(selection.w, selection.h) : 0;
+            const canopy    = (selection.rackType === 'wall')
+                ? wallLen * (selection.height || 2.4)
+                : layerArea * layers;
 
             // ── Section 1: LIVE DATA from Harvest Tracker cycles ────────────
             // Find cycles assigned to this rack
@@ -2024,6 +2101,18 @@ def garden_planner():
                 document.getElementById(id).addEventListener('input', e => {
                     if(selection && selection.type === 'rack'){
                         const val = parseFloat(e.target.value);
+                        // Wall rack: whichever axis is the thickness (short axis) is locked at 0.30m
+                        if (selection.rackType === 'wall') {
+                            const portrait = selection.h >= selection.w;
+                            if ((id === 'rackWidth'  &&  portrait) ||
+                                (id === 'rackLength' && !portrait)) {
+                                e.target.value = '0.30';
+                                if (portrait) selection.w = 0.30; else selection.h = 0.30;
+                                selection.wallThickness = 0.30;
+                                updateRackKPIs(); updateStats(); draw(); sync3D();
+                                return;
+                            }
+                        }
                         if (id === 'rackWidth') selection.w = val;
                         if (id === 'rackLength') selection.h = val;
                         if (id === 'rackHeight') selection.height = val;
@@ -2451,8 +2540,18 @@ def garden_planner():
                 if(selection.type === 'rack') {
                     const rt = selection.rackType || 'standard';
                     document.getElementById('rackWidth').value  = selection.w.toFixed(2);
-                    document.getElementById('rackLength').value = selection.h.toFixed(2);
                     document.getElementById('rackHeight').value = (selection.height || 2.5).toFixed(2);
+                    if (selection.rackType === 'wall') {
+                        // Show correct values based on orientation
+                        const portrait = selection.h > selection.w;
+                        document.getElementById('rackWidth').value  = portrait ? '0.30' : selection.w.toFixed(2);
+                        document.getElementById('rackLength').value = portrait ? selection.h.toFixed(2) : '0.30';
+                        // Re-apply wall rack UI state
+                        setTimeout(()=>setRackSubtype('wall'), 10);
+                    } else {
+                        document.getElementById('rackWidth').value  = selection.w.toFixed(2);
+                        document.getElementById('rackLength').value = selection.h.toFixed(2);
+                    }
                     document.getElementById('objLayers').value = selection.layers;
                     document.getElementById('layerSpacing').value = selection.spacing || 0.6;
                     document.getElementById('towerPlants').value  = selection.layers || 20;
@@ -3089,7 +3188,16 @@ def garden_planner():
             objects.forEach(o=>{
                 if(o.type==='building'){bA+=o.w*o.h;if(o.height>maxH)maxH=o.height;}
                 else if(o.type==='tank'){const wt=o.w*o.h*o.height*1000;if(selection&&selection.id===o.id)document.getElementById('water-weight').innerText=wt.toLocaleString();tG+=o.w*o.h;}
-                else if(o.type==='rack'){cA+=o.w*o.h*(o.layers||1);tG+=o.w*o.h;rackCnt++;}
+                else if(o.type==='rack'){
+                    // Wall racks: grow area = wall length × rack height
+                    // Wall length = max(w, h); thickness = min(w, h) = 0.30m
+                    const rackCanopy = (o.rackType === 'wall')
+                        ? Math.max(o.w, o.h) * (o.height || 2.4)
+                        : o.w * o.h * (o.layers || 1);
+                    cA += rackCanopy;
+                    tG += o.w * o.h;  // floor footprint always uses w × h (thickness for wall)
+                    rackCnt++;
+                }
             });
             document.getElementById('m-build').innerText=bA.toFixed(1);
             document.getElementById('m-canopy').innerText=cA.toFixed(1);
