@@ -2,9 +2,9 @@ import streamlit as st
 
 st.set_page_config(page_title="Assumptions & Methodology", page_icon="📋", layout="wide")
 from core.auth import require_login, render_user_admin, logout, current_user
-require_login()
+require_login() # Keep the page_icon emoji, but remove from title # Keep the page_icon emoji, but remove from title
 
-st.title("📋 Assumptions & Methodology")
+st.title("umptions & Methodology")
 st.markdown(
     "This page documents every data source, formula assumption, and modelling choice "
     "used in the ROI Calculator. It exists so that users — whether farmers, investors, "

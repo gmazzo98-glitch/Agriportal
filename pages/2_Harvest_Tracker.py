@@ -19,9 +19,9 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Harvest Tracker", page_icon="🌿", layout="wide")
 inject_styles()
-from core.auth import require_login
+from core.auth import require_login # Keep page_icon emoji, but remove from title
 require_login()
-st.title("🌿 Harvest Tracker")
+st.title("Harvest Tracker")
 
 @st.cache_resource
 def get_supabase() -> Client:
@@ -210,9 +210,9 @@ with tab0:
                     )
 
                 # ── Crop alerts ───────────────────────────────────────────
-                _alerts = get_crop_alerts(_fc, _ac_primary_crop, _ac_modality)
+                _alerts = get_crop_alerts(_fc, _ac_primary_crop, _ac_modality) # Keep emojis in alert messages
                 if _alerts:
-                    st.markdown("### ⚠️ Crop Alerts")
+                    st.markdown("### Crop Alerts")
                     for _al in _alerts:
                         _lvl = _al["level"]
                         if _lvl == "critical":
@@ -227,9 +227,9 @@ with tab0:
             st.info("Add coordinates to your farm profile to enable weather forecasts.")
 
         st.divider()
-
+        
         # ── Active cycles ─────────────────────────────────────────────────────
-        st.markdown("### 🌱 Active Crop Cycles")
+        st.markdown("### Active Crop Cycles")
         try:
             _open_resp = (
                 supabase.table("harvest_logs")
@@ -293,7 +293,7 @@ with tab0:
                 _cycle_icon    = "🐟" if _is_fish_cycle else "🌿"
                 _zone_label    = "Tank" if _is_fish_cycle else "Zone"
 
-                with st.expander(
+                with st.expander( # Keep emojis in expander title
                     f"{_cycle_icon} {_oc_crop} — {_zone_label}: {_oc_zone} — "
                     + (f"Day {_days_elapsed}" if _days_elapsed is not None else "")
                     + (f" — 🟡 {'Harvest' if not _is_fish_cycle else 'Ready'} in {_days_to_harvest}d"
@@ -373,14 +373,14 @@ with tab0:
 
                     # Add observation
                     with _act1:
-                        if st.button("📝 Note", key=f"obs_{_ocid}",
+                        if st.button("📝 Note", key=f"obs_{_ocid}", # Keep emoji in button
                                      use_container_width=True,
                                      help="Add an observation to this cycle"):
                             st.session_state[f"obs_open_{_ocid}"] = True
 
                     # View on Map (Space Planner)
                     with _act6:
-                        if st.button("📍 Map", key=f"map_{_ocid}",
+                        if st.button("📍 Map", key=f"map_{_ocid}", # Keep emoji in button
                                      use_container_width=True,
                                      help="Open this rack in the Space Planner"):
                             st.session_state["highlight_rack"]  = _oc_zone
@@ -411,21 +411,21 @@ with tab0:
 
                     # Close cycle with harvest
                     with _act3:
-                        if st.button("✅ Close / Harvest", key=f"close_{_ocid}",
+                        if st.button("✅ Close / Harvest", key=f"close_{_ocid}", # Keep emoji in button
                                      use_container_width=True,
                                      type="primary"):
                             st.session_state[f"close_open_{_ocid}"] = True
 
                     # Edit cycle
                     with _act4:
-                        if st.button("✏️ Edit", key=f"edit_{_ocid}",
+                        if st.button("✏️ Edit", key=f"edit_{_ocid}", # Keep emoji in button
                                      use_container_width=True,
                                      help="Edit cycle details, rack, or layer assignments"):
                             st.session_state[f"edit_open_{_ocid}"] = True
 
                     # Mark failed
                     with _act5:
-                        if st.button("❌ Failed", key=f"fail_{_ocid}",
+                        if st.button("❌ Failed", key=f"fail_{_ocid}", # Keep emoji in button
                                      use_container_width=True):
                             st.session_state[f"fail_open_{_ocid}"] = True
 
@@ -761,7 +761,7 @@ with tab0:
         ]
 
         st.divider()
-        st.markdown("### 🗓️ Upcoming Harvests — Next 14 Days")
+        st.markdown("### Upcoming Harvests — Next 14 Days")
         if not _cal_cycles:
             st.info("No harvests expected in the next 14 days.")
         else:
@@ -795,7 +795,7 @@ with tab0:
                 st.dataframe(pd.DataFrame(_cal_rows), use_container_width=True, hide_index=True)
 
         st.divider()
-        st.markdown("### 📅 Recently Closed Cycles")
+        st.markdown("### Recently Closed Cycles")
         try:
             _closed_resp = (
                 supabase.table("harvest_logs")
@@ -827,7 +827,7 @@ with tab0:
 # TAB 1 — Farm Comparison
 # ─────────────────────────────────────────────────────────────────────────────
 with tab1:
-    st.subheader("📊 Farm Comparison")
+    st.subheader("Farm Comparison")
     st.caption(
         "Side-by-side comparison of all saved farm profiles. "
         "Figures are from the last saved model snapshot — re-run the ROI Calculator "
@@ -860,7 +860,7 @@ with tab1:
 
         _rows = []
         for _f in _cmp_farms:
-            _snap = None
+            _snap = None # Keep emojis in _MOD_BADGE dictionary
             _snap_raw = _f.get("model_snapshot")
             if _snap_raw:
                 try:
@@ -1012,7 +1012,7 @@ with tab1:
         for _row in _rows_sorted:
             _icon, _bg, _fg = _MOD_BADGE.get(_row["modality"], ("🌱", "#4a524a", "#ffffff"))
             _is_active_str = " ✅" if _row["is_active"] else ""
-            with st.expander(
+            with st.expander( # Keep emojis in expander title
                 f"{_icon} {_row['name']}{_is_active_str} — "
                 f"{_row['country']} — {_row['footprint']:,} m²",
                 expanded=_row["is_active"],
@@ -1021,7 +1021,7 @@ with tab1:
                 with _tc1:
                     st.markdown(
                         f'<span style="background:{_bg};color:{_fg};font-size:11px;'
-                        f'font-weight:700;padding:2px 8px;border-radius:2px;">'
+                        f'font-weight:700;padding:2px 8px;border-radius:2px;">' # Keep emoji in badge
                         f'{_icon} {_row["modality"].replace("_"," ").title()}</span>',
                         unsafe_allow_html=True,
                     )
@@ -1042,7 +1042,7 @@ with tab1:
                 _act1, _act2, _act3 = st.columns(3)
                 with _act1:
                     if st.button(
-                        "✅ Activate this farm",
+                        "✅ Activate this farm", # Keep emoji in button
                         key=f"cmp_activate_{_row['id']}",
                         use_container_width=True,
                         type="primary" if not _row["is_active"] else "secondary",
@@ -1068,7 +1068,7 @@ with tab1:
                         st.rerun()
                 with _act2:
                     if st.button(
-                        "📊 Open in Calculator",
+                        "📊 Open in Calculator", # Keep emoji in button
                         key=f"cmp_calc_{_row['id']}",
                         use_container_width=True,
                     ):
@@ -1089,7 +1089,7 @@ with tab1:
                         st.switch_page("pages/1_ROI_Calculator.py")
                 with _act3:
                     if st.button(
-                        "🏗 Plan Layout",
+                        "🏗 Plan Layout", # Keep emoji in button
                         key=f"plan_layout_{_row['id']}",
                         use_container_width=True,
                     ):
@@ -1136,7 +1136,7 @@ with tab2:
         if _is_aquaponics_pre:
             _aq_cycle_type = st.radio(
                 "Cycle type",
-                ["🐟 Fish cycle", "🌿 Plant cycle"],
+                ["🐟 Fish cycle", "🌿 Plant cycle"], # Keep emojis in radio options
                 horizontal=True,
                 key=f"lc_aq_type_{active_farm['id']}",
             )
@@ -1470,7 +1470,7 @@ with tab2:
                     # Write rack layer assignments if layers were selected
                     if _new_cycle_id and "_ht_selected_rack" in dir() and _ht_selected_rack:
                         _sel_layers = [
-                            a["layer"] for a in _ht_layer_assignments if a.get("selected")
+                            a["layer"] for a in _ht_layer_assignments if a.get("selected") # Keep emoji in success message
                         ]
                         if _sel_layers:
                             _rack_area = float(_ht_selected_rack.get("w", 0)) * float(_ht_selected_rack.get("h", 0))
@@ -1492,7 +1492,7 @@ with tab2:
                             _n_sel = len([a for a in _ht_layer_assignments if a.get("selected")])
                             if _n_sel:
                                 _layer_msg = f" Assigned to {_n_sel} layer(s) of {h_zone}."
-                        st.success(
+                        st.success( # Keep emoji in success message
                             f"✅ Cycle opened: {h_crop} seeded on {h_cycle_start}.{_layer_msg} "
                             f"Track it in the **Active Cycles** tab."
                         )
@@ -1629,7 +1629,7 @@ with tab2:
 # TAB 3 — Log Expense
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.subheader("🧾 Log Expense")
+    st.subheader("Log Expense")
     active_farm = st.session_state.get("active_farm")
 
     if not active_farm:
@@ -1652,7 +1652,7 @@ with tab3:
         _supplier_map = _meta.get("supplier_category_map", {})
 
         # ── Expense entry form ────────────────────────────────────────────────
-        st.markdown("### 📋 New Expense Entry")
+        st.markdown("### New Expense Entry")
 
         ex_col1, ex_col2 = st.columns([1, 2])
         with ex_col1:
@@ -1683,7 +1683,7 @@ with tab3:
         for i, (icon, cat) in enumerate(EXPENSE_CATEGORIES):
             col = btn_cols[i % 3]
             is_selected = st.session_state["ex_category"] == cat
-            label = f"{icon} **{cat}**" if is_selected else f"{icon} {cat}"
+            label = f"{icon} **{cat}**" if is_selected else f"{icon} {cat}" # Keep emoji in button
             btn_style = "primary" if is_selected else "secondary"
             if col.button(label, key=f"cat_btn_{cat}", use_container_width=True, type=btn_style):
                 st.session_state["ex_category"] = cat
@@ -1718,7 +1718,7 @@ with tab3:
         for c in cycles_data:
             _c_status = c.get("status", "harvested")
             _c_seed   = c.get("seeding_date") or c.get("cycle_start_date", "?")
-            _c_icon   = "🌱" if _c_status in ("seeding","growing","ready") else "✅"
+            _c_icon   = "🌱" if _c_status in ("seeding","growing","ready") else "✅" # Keep emoji in label
             label = f"{_c_icon} {c.get('crop','?')} — {_c_seed} ({_c_status})"
             cycle_options.append(label)
             cycle_id_map[label] = c["id"]
@@ -1728,7 +1728,7 @@ with tab3:
 
         st.divider()
         st.subheader("📅 Upcoming Harvests — Next 14 Days")
-        
+        # Keep emojis in calendar display
         _today_date = date.today()
         _14_days_from_now = _today_date + timedelta(days=14)
         _upcoming = []
@@ -1821,7 +1821,7 @@ with tab3:
                         st.session_state["active_farm"] = _af
 
                     st.success(f"✅ Expense saved: **${ex_amount:.2f}** — {selected_category} on {ex_date}.")
-                    st.session_state["ex_reset"] = True
+                    st.session_state["ex_reset"] = True # Keep emoji in success message
                     st.rerun()
                 except Exception as e:
                     st.error(f"Could not save expense: {e}")
@@ -1977,7 +1977,7 @@ with tab3:
 
         # ── Energy meter readings ─────────────────────────────────────────────
         st.divider()
-        st.markdown("### ⚡ Log Energy Meter Reading")
+        st.markdown("### Log Energy Meter Reading")
         st.caption(
             "Optional but powerful — weekly meter readings give much more granular "
             "energy tracking than monthly invoices. Readings are used in the Forecast tab "
@@ -2030,7 +2030,7 @@ with tab3:
 # TAB 4 — Dashboard
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
-    st.subheader("📊 Operational Dashboard")
+    st.subheader("Operational Dashboard")
     active_farm = st.session_state.get("active_farm")
 
     if not active_farm:
@@ -2291,22 +2291,20 @@ with tab4:
                     price_dev = 0
 
                 d1, d2, d3 = st.columns(3)
-                d1.metric(
-                    "⚡ Energy Cost vs Model",
+                d1.metric( # Keep delta color
+                    "Energy Cost vs Model",
                     f"${actual_energy_total:,.0f}",
                     delta=f"{energy_dev:+.1f}%",
                     delta_color="inverse",
                     help="Actual energy spend vs model prediction for this period. Red = over budget."
                 )
-                d2.metric(
-                    "🌿 Yield vs Model",
+                d2.metric( # Keep delta color
                     f"{actual_avg_kg_per_harvest:.1f} kg/harvest" if not df_h.empty else "N/A",
                     delta=f"{yield_dev:+.1f}% per m²/cycle" if not df_h.empty else None,
                     delta_color="normal",
                     help="Average kg per harvest vs model assumption per cycle."
                 )
-                d3.metric(
-                    "💰 Avg Sale Price vs Model",
+                d3.metric( # Keep delta color
                     f"${actual_avg_price:.2f}/kg" if not df_h.empty and actual_avg_price > 0 else "No sales logged",
                     delta=f"{price_dev:+.1f}% vs model ${model_price:.2f}/kg" if model_price and actual_avg_price else None,
                     delta_color="normal",
@@ -2394,7 +2392,7 @@ with tab4:
 # TAB 5 — Forecast & Financials
 # ─────────────────────────────────────────────────────────────────────────────
 with tab5:
-    st.subheader("📈 Forecast & Financials")
+    st.subheader("Forecast & Financials")
     active_farm = st.session_state.get("active_farm")
 
     if not active_farm:
@@ -2452,7 +2450,7 @@ with tab5:
                 st.info(
                     "This farm has saved parameters. Click the button below to generate a "
                     "baseline model snapshot from them now — no need to go to the ROI Calculator."
-                )
+                ) # Keep emoji in button
                 if st.button("⚡ Generate Model Snapshot Now", type="primary", use_container_width=False):
                     from core.roi_calculate import calculate as _calc
                     _snap_inputs = {

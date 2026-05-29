@@ -36,7 +36,7 @@ def get_supabase() -> Client:
 
 supabase = get_supabase()
 
-st.set_page_config(page_title="ROI Calculator", page_icon="📊", layout="wide")
+st.set_page_config(page_title="ROI Calculator", page_icon="📊", layout="wide") # Keep page_icon emoji
 inject_styles()
 require_login()
 
@@ -64,7 +64,7 @@ def _render_farm_selector_sidebar():
         _active_name = _active["name"] if _active else None
 
         if _active:
-            _mod_badge = {
+            _mod_badge = { # Keep emojis in _mod_badge dictionary
                 "vertical_farm": "🏭",
                 "greenhouse": "🌿",
                 "polytunnel": "🌿",
@@ -72,7 +72,7 @@ def _render_farm_selector_sidebar():
                 "aquaponics_coupled": "♻️",
             }.get(_active.get("modality", ""), "🌱")
             st.success(f"{_mod_badge} **{_active['name']}**")
-            if _active.get("country"):
+            if _active.get("country"): # Keep emoji in success message
                 st.caption(f"📍 {_active['country']}")
         else:
             st.info("No farm loaded. Select or create one below.")
@@ -88,7 +88,7 @@ def _render_farm_selector_sidebar():
         if _sel != "— select —":
             _farm = next((f for f in _farms_list if f["name"] == _sel), None)
             if _farm and (not _active or _active.get("name") != _sel):
-                if st.button("⬇️ Load", use_container_width=True, key="global_farm_load_btn"):
+                if st.button("⬇️ Load", use_container_width=True, key="global_farm_load_btn"): # Keep emoji in button
                     st.session_state["active_farm"]        = _farm
                     st.session_state["_pending_farm_load"] = _farm
                     st.session_state["gh_country"]         = _farm.get("country", "Germany")
@@ -107,7 +107,7 @@ def _render_farm_selector_sidebar():
                         st.session_state["fim_lat"]    = _farm["lat"]
                         st.session_state["fim_lng"]    = _farm["lon"]
                     _mod = _farm.get("modality", "vertical_farm")
-                    _mod_map = {
+                    _mod_map = { # Keep emojis in _mod_map dictionary
                         "vertical_farm":        "🏭 Indoor Vertical Farm",
                         "greenhouse":           "🌿 High-Tech Greenhouse",
                         "polytunnel":           "🌿 High-Tech Greenhouse",
@@ -118,7 +118,7 @@ def _render_farm_selector_sidebar():
                     st.rerun()
 
         if _active:
-            if st.button("✖ Clear farm", use_container_width=True, key="global_farm_clear_btn"):
+            if st.button("✖ Clear farm", use_container_width=True, key="global_farm_clear_btn"): # Keep emoji in button
                 st.session_state.pop("active_farm", None)
                 st.rerun()
 
@@ -1732,10 +1732,10 @@ if "_pending_modality" in st.session_state:
 
 # ── Persistent farm context (top of sidebar, all modalities) ────────────
 _active_farm_global = render_farm_context_sidebar(supabase=supabase)
-
+ 
 # ── Setup gate — no farm loaded ──────────────────────────────────────────
 if not _active_farm_global:
-    st.title("📊 CEA Feasibility Calculator")
+    st.title("CEA Feasibility Calculator") # Remove emoji from title
     st.info(
         "**No farm profile loaded.**\n\n"
         "Select an existing farm profile in the sidebar to run the analysis, "
@@ -1743,13 +1743,13 @@ if not _active_farm_global:
         "👈 Use the sidebar to load or create a farm."
     )
     st.markdown("---")
-    st.caption(
+    st.caption( # Keep emoji in page link
         "First time? Pick a modality, fill in the parameters below, run the calculation, "
         "then click 💾 Save as Farm Profile at the bottom of the results."
     )
 
 modality = st.radio(
-    "Select farming modality",
+    "Select farming modality", # Keep emojis in radio options
     options=[
         "🏭 Indoor Vertical Farm",
         "🌿 High-Tech Greenhouse",
@@ -1862,7 +1862,7 @@ if modality == "🏭 Indoor Vertical Farm":
         _vf_amb_temp = st.session_state.get("active_farm", {}).get("ambient_temp_annual")
         if _vf_amb_temp is not None:
             _vf_suggested_hvac = (
-                "Excellent conditions" if _vf_amb_temp >= 17
+                "Excellent conditions" if _vf_amb_temp >= 17 # Remove emoji from caption
                 else "Standard" if _vf_amb_temp >= 12
                 else "High HVAC"
             )
@@ -1870,7 +1870,7 @@ if modality == "🏭 Indoor Vertical Farm":
                 st.caption(
                     f"\U0001f4a1 Climate data suggests **{_vf_suggested_hvac}** "
                     f"(ambient {_vf_amb_temp:.1f}\u00b0C \u00b7 "
-                    f"\u226517\u00b0C \u2192 Excellent \u00b7 12\u201317\u00b0C \u2192 Standard \u00b7 <12\u00b0C \u2192 High HVAC). "
+                    f"\u226517\u00b0C \u2192 Excellent \u00b7 12\u201317\u00b0C \u2192 Standard \u00b7 <12\u00b0C \u2192 High HVAC). " # Remove emoji from caption
                     f"Current selection: {_hv_default}."
                 )
         hvac        = st.selectbox("HVAC conditions",
@@ -2043,7 +2043,7 @@ if modality == "🏭 Indoor Vertical Farm":
         _crop_dli = CROPS[crop]["dli"]
         _nat_frac = compute_natural_dli_fraction(_loc_dli, _crop_dli)
         st.caption(
-            f"🌤️ **Climate profile active** — "
+            f"**Climate profile active** — " # Remove emoji from caption
             f"Mean annual DLI: {_loc_dli:.1f} mol/m²/day · "
             f"Ambient temperature: {_loc_temp:.1f}°C · "
             f"Natural DLI coverage for {crop}: {_nat_frac*100:.0f}% "
@@ -2052,7 +2052,7 @@ if modality == "🏭 Indoor Vertical Farm":
     
     # ── Data Sources panel ───────────────────────────────────────────────────
     _vf_farm_has_climate = bool(st.session_state.get("active_farm", {}).get("mean_annual_dli"))
-    _vf_active_data      = st.session_state.get("active_farm") or {}
+    _vf_active_data      = st.session_state.get("active_farm") or {} # Remove emoji from expander title
     with st.expander("ℹ️ Data sources & calculation transparency", expanded=False):
         _di1, _di2 = st.columns(2)
         with _di1:
@@ -2060,7 +2060,7 @@ if modality == "🏭 Indoor Vertical Farm":
             if _vf_farm_has_climate:
                 _vf_dli  = _vf_active_data.get("mean_annual_dli", 0)
                 _vf_temp = _vf_active_data.get("ambient_temp_annual", 0)
-                _vf_sugg = "Excellent conditions" if _vf_temp >= 17 else ("Standard" if _vf_temp >= 12 else "High HVAC")
+                _vf_sugg = "Excellent conditions" if _vf_temp >= 17 else ("Standard" if _vf_temp >= 12 else "High HVAC") # Remove emoji from markdown
                 st.markdown(
                     f"- **Mean annual DLI: {_vf_dli:.1f} mol/m²/day** "
                     f"— shown for information only. VF uses fully artificial lighting; "
@@ -2068,7 +2068,7 @@ if modality == "🏭 Indoor Vertical Farm":
                     f"- **Ambient temperature: {_vf_temp:.1f}°C** "
                     f"— used to suggest HVAC tier (suggests **{_vf_sugg}** for this location). "
                     f"Does not directly enter the energy formula; the HVAC selectbox is the active input.\n"
-                    f"- Source: Open-Meteo 10-year historical archive (`archive-api.open-meteo.com/v1/archive`). "
+                    f"- Source: Open-Meteo 10-year historical archive (`archive-api.open-meteo.com/v1/archive`). " # Remove emoji from markdown
                     f"Fetched once at farm save time, stored in Supabase."
                 )
             else:
@@ -2076,7 +2076,7 @@ if modality == "🏭 Indoor Vertical Farm":
                     "- ⚠️ **No climate data available** for this farm.\n"
                     "- Set farm coordinates in the **Farm Intelligence Map**, then re-save the farm profile.\n"
                     "- Until then, the HVAC tier selection has no location-based suggestion."
-                )
+                ) # Keep warning emoji
         with _di2:
             st.markdown("**🎛️ Manual inputs — set in this calculator**")
             _hvac_cur = st.session_state.get("roi_hvac", "Standard")
@@ -2089,7 +2089,7 @@ if modality == "🏭 Indoor Vertical Farm":
                 f"- Country → electricity price (IEA/Eurostat, see §5)\n"
                 f"- All financial structure inputs (see §17.7)"
             )
-        st.caption(
+        st.caption( # Remove emoji from caption
             "ℹ️ Formula: Energy = DLI × 0.2778 / LED efficacy × cycle days "
             "× HVAC factor × cycles/yr × EGA × €/kWh. Full derivation in Assumptions §3."
         )
@@ -2102,7 +2102,7 @@ if modality == "🏭 Indoor Vertical Farm":
     _mkwh2    = COUNTRIES.get(inputs["country"], {}).get("kwh", 0)
     _mlabour2 = COUNTRIES.get(inputs["country"], {}).get("labour", 0)
     if _el_r2["iso"]:
-        _e_flag  = abs(_el_e2["industrial"] - _mkwh2) > 0.01
+        _e_flag  = abs(_el_e2["industrial"] - _mkwh2) > 0.01 # Keep warning emoji
         _l_flag  = abs(_el_l2["industrial_loaded"] - _mlabour2) > 3.0
         _exp_lbl = "⚠️ Verify your input assumptions" if (_e_flag or _l_flag) else "✅ Input assumptions cross-check"
         with st.expander(_exp_lbl, expanded=(_e_flag or _l_flag)):
@@ -2224,7 +2224,7 @@ if modality == "🏭 Indoor Vertical Farm":
 
     # ── Save as Farm Profile ──────────────────────────────────────────────────
     st.divider()
-    save_col1, save_col2 = st.columns([5, 1])
+    save_col1, save_col2 = st.columns([5, 1]) # Keep emoji in button
     with save_col2:
         if st.button("💾 Save as Farm Profile", use_container_width=True):
             st.session_state["show_save_farm_form"] = True
@@ -2282,7 +2282,7 @@ if modality == "🏭 Indoor Vertical Farm":
                 _vu1, _vu2, _vu3 = st.columns([2, 2, 1])
                 with _vu1:
                     if st.button("✅ Update existing farm", use_container_width=True, key="vf_update_btn"):
-                        try:
+                        try: # Keep emoji in success message
                             supabase.table("farms").update(_vf_payload).eq("id", _vf_active["id"]).execute()
                             st.session_state["active_farm"] = {**_vf_active, **_vf_payload}
                             st.success(f"✅ Farm **{_vf_active['name']}** updated.")
@@ -2296,7 +2296,7 @@ if modality == "🏭 Indoor Vertical Farm":
                     farm_profile_name = st.text_input("New farm name", key="farm_profile_name_input", placeholder="Enter name for new profile")
                     if st.button("➕ Save as new farm", use_container_width=True, key="vf_saveas_btn"):
                         if not farm_profile_name.strip():
-                            st.error("Please enter a name for the new farm profile.")
+                            st.error("Please enter a name for the new farm profile.") # Keep emoji in success message
                         else:
                             try:
                                 supabase.table("farms").insert({**_vf_payload, "name": farm_profile_name.strip(), "owner_id": current_user()}).execute()
@@ -2314,7 +2314,7 @@ if modality == "🏭 Indoor Vertical Farm":
             else:
                 st.markdown("**Save current configuration as a Farm Profile**")
                 st.caption("Saves all parameters so you can track harvests in the Harvest Tracker.")
-                farm_profile_name = st.text_input("Farm name", key="farm_profile_name_input")
+                farm_profile_name = st.text_input("Farm name", key="farm_profile_name_input") # Keep emoji in button
                 _vn1, _vn2 = st.columns([3, 1])
                 with _vn1:
                     if st.button("✅ Confirm Save", use_container_width=True, key="vf_confirm_save"):
@@ -3371,7 +3371,7 @@ elif modality == "🌿 High-Tech Greenhouse":
     _gh_active2 = st.session_state.get("active_farm")
     if _gh_active2 and _gh_active2.get("mean_annual_dli"):
         _gh_loc_dli2  = _gh_active2["mean_annual_dli"]
-        _gh_loc_temp2 = _gh_active2["ambient_temp_annual"]
+        _gh_loc_temp2 = _gh_active2["ambient_temp_annual"] # Remove emoji from caption
         _gh_crop_dli2 = gh_crop_data["dli"]
         _gh_nat_frac2 = compute_natural_dli_fraction(_gh_loc_dli2, _gh_crop_dli2)
         st.caption(
@@ -3383,7 +3383,7 @@ elif modality == "🌿 High-Tech Greenhouse":
         )
 
     # ── Data Sources panel ───────────────────────────────────────────────────
-    _gh_has_climate  = bool(st.session_state.get("active_farm", {}).get("mean_annual_dli"))
+    _gh_has_climate  = bool(st.session_state.get("active_farm", {}).get("mean_annual_dli")) # Remove emoji from expander title
     _gh_active_data  = st.session_state.get("active_farm") or {}
     with st.expander("ℹ️ Data sources & calculation transparency", expanded=False):
         _gdi1, _gdi2 = st.columns(2)
@@ -3407,7 +3407,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                     "- ⚠️ **No climate data available** for this farm.\n"
                     "- Set coordinates in the **Farm Intelligence Map**, then re-save the farm profile.\n"
                     "- Until then, heating energy uses a generic temperate climate assumption "
-                    "and supplemental lighting is based on crop's built-in natural DLI fraction."
+                    "and supplemental lighting is based on crop's built-in natural DLI fraction." # Keep warning emoji
                 )
         with _gdi2:
             st.markdown("**🎛️ Manual inputs — set in this calculator**")
@@ -3432,7 +3432,7 @@ elif modality == "🌿 High-Tech Greenhouse":
     _mkwh2    = COUNTRIES.get(gh_inputs["country"], {}).get("kwh", 0)
     _mlabour2 = COUNTRIES.get(gh_inputs["country"], {}).get("labour", 0)
     if _el_r2["iso"]:
-        _e_flag  = abs(_el_e2["industrial"] - _mkwh2) > 0.01
+        _e_flag  = abs(_el_e2["industrial"] - _mkwh2) > 0.01 # Keep warning emoji
         _l_flag  = abs(_el_l2["industrial_loaded"] - _mlabour2) > 3.0
         _exp_lbl = "⚠️ Verify your input assumptions" if (_e_flag or _l_flag) else "✅ Input assumptions cross-check"
         with st.expander(_exp_lbl, expanded=(_e_flag or _l_flag)):
@@ -3440,7 +3440,7 @@ elif modality == "🌿 High-Tech Greenhouse":
             with _rc1:
                 st.markdown("**⚡ Electricity**")
                 _e_dir = "higher" if _el_e2["industrial"] > _mkwh2 else "lower"
-                _e_pct = abs(_el_e2["industrial"] - _mkwh2) / _mkwh2 * 100 if _mkwh2 else 0
+                _e_pct = abs(_el_e2["industrial"] - _mkwh2) / _mkwh2 * 100 if _mkwh2 else 0 # Keep warning emoji
                 if _e_flag:
                     st.warning(
                         f"Reference industrial rate: **${_el_e2['industrial']:.3f}/kWh** "
@@ -3449,7 +3449,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                     )
                 else:
                     st.success(f"Model electricity (${_mkwh2:.3f}/kWh) aligns with reference industrial rate (${_el_e2['industrial']:.3f}/kWh).")
-                st.caption(f"Source: {_el_e2['source']}" + (f" · ⚡ {_el_e2['live_note']}" if _el_e2.get("live") else ""))
+                st.caption(f"Source: {_el_e2['source']}" + (f" · {_el_e2['live_note']}" if _el_e2.get("live") else "")) # Remove emoji from caption
             with _rc2:
                 st.markdown("**👷 Labour**")
                 _l_dir = "higher" if _el_l2["industrial_loaded"] > _mlabour2 else "lower"
@@ -3459,7 +3459,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                         f"Reference fully-loaded industrial: **${_el_l2['industrial_loaded']:.0f}/hr** "
                         f"({_l_pct:.0f}% {_l_dir} than model’s ${_mlabour2:.0f}/hr). "
                         f"Overhead {_el_l2['overhead_pct']} applied (base ${_el_l2['industrial_base']:.0f}/hr)."
-                    )
+                    ) # Keep warning emoji
                 else:
                     st.success(f"Model labour (${_mlabour2:.0f}/hr) aligns with reference (${_el_l2['industrial_loaded']:.0f}/hr, overhead {_el_l2['overhead_pct']}).")
                 st.caption(f"Source: {_el_l2['source']}")
@@ -3477,7 +3477,7 @@ elif modality == "🌿 High-Tech Greenhouse":
 
     gh_pdf_col1, gh_pdf_col2 = st.columns([5, 1])
     with gh_pdf_col2:
-        if st.button("📄 Download PDF Report", key="gh_pdf_btn", use_container_width=True):
+        if st.button("📄 Download PDF Report", key="gh_pdf_btn", use_container_width=True): # Keep emoji in button
             with st.spinner("Generating PDF..."):
                 gh_pdf_bytes = generate_gh_pdf_report(gh_inputs, gh_r)
                 gh_filename = f"GH_Report_{gh_inputs['crop'].replace(' ','_').replace('/','').replace('(','').replace(')','_')}_{gh_inputs['country']}_{date.today().strftime('%Y%m%d')}.pdf"
@@ -3526,7 +3526,7 @@ elif modality == "🌿 High-Tech Greenhouse":
         st.caption("☀️ Natural light only — no supplemental lighting required.")
 
     if gh_r["dscr"] is not None and gh_r["dscr"] < 1.0:
-        st.warning(
+        st.warning( # Keep warning emoji
             f"⚠️ **Debt service coverage is low (DSCR = {gh_r['dscr']:.2f}x).** "
             f"Annual debt repayment (${gh_r['annual_debt_service']:,.0f}) exceeds EBITDA (${gh_r['ebitda']:,.0f}). "
             f"Consider reducing LTV, extending the loan term, increasing farm scale, or selecting a higher-margin crop."
@@ -3557,7 +3557,7 @@ elif modality == "🌿 High-Tech Greenhouse":
     # ── Save as Farm Profile ──────────────────────────────────────────────────
     st.divider()
     gh_save_col1, gh_save_col2 = st.columns([5, 1])
-    with gh_save_col2:
+    with gh_save_col2: # Keep emoji in button
         if st.button("💾 Save as Farm Profile", key="gh_save_btn", use_container_width=True):
             st.session_state["gh_show_save_form"] = True
 
@@ -3569,7 +3569,7 @@ elif modality == "🌿 High-Tech Greenhouse":
             _climate_data = {}
             if _save_lat and _save_lon:
                 with st.spinner("🌤️ Fetching climate profile for this location…"):
-                    try:
+                    try: # Keep emoji in spinner
                         from core.climate import fetch_climate_profile
                         _climate_data = fetch_climate_profile(_save_lat, _save_lon)
                     except Exception:
@@ -3614,7 +3614,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                 _gu1, _gu2, _gu3 = st.columns([2, 2, 1])
                 with _gu1:
                     if st.button("✅ Update existing farm", use_container_width=True, key="gh_update_btn"):
-                        try:
+                        try: # Keep emoji in success message
                             supabase.table("farms").update(_gh_payload).eq("id", _gh_active["id"]).execute()
                             st.session_state["active_farm"] = {**_gh_active, **_gh_payload}
                             st.success(f"✅ Farm **{_gh_active['name']}** updated.")
@@ -3628,7 +3628,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                     gh_farm_name = st.text_input("New farm name", key="gh_farm_name_input", placeholder="Enter name for new profile")
                     if st.button("➕ Save as new farm", use_container_width=True, key="gh_saveas_btn"):
                         if not gh_farm_name.strip():
-                            st.error("Please enter a name for the new farm profile.")
+                            st.error("Please enter a name for the new farm profile.") # Keep emoji in success message
                         else:
                             try:
                                 supabase.table("farms").insert({**_gh_payload, "name": gh_farm_name.strip(), "owner_id": current_user()}).execute()
@@ -3646,7 +3646,7 @@ elif modality == "🌿 High-Tech Greenhouse":
             else:
                 st.markdown("**Save current configuration as a Farm Profile**")
                 st.caption("Saves all parameters so you can track harvests in the Harvest Tracker.")
-                gh_farm_name = st.text_input("Farm name", key="gh_farm_name_input")
+                gh_farm_name = st.text_input("Farm name", key="gh_farm_name_input") # Keep emoji in button
                 _gn1, _gn2 = st.columns([3, 1])
                 with _gn1:
                     if st.button("✅ Confirm Save", key="gh_confirm_save", use_container_width=True):
@@ -4094,7 +4094,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     _aq_mode  = "decoupled" if modality == "🐟 Decoupled Aquaponics" else "coupled"
     _aq_label = modality
 
-    st.markdown(f"### {_aq_label}")
+    st.markdown(f"### {_aq_label}") # Remove emoji from markdown
 
     # ── Session state defaults ────────────────────────────────────────────────
     _AQ_DEFAULTS = {
@@ -4139,7 +4139,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         st.header("Aquaponics Parameters")
 
         # Plant parameters
-        st.subheader("🌿 Plant Side")
+        st.subheader("Plant Side") # Remove emoji from subheader
         aq_country_list = list(COUNTRIES.keys())
         aq_country = st.selectbox("Country", aq_country_list,
             index=aq_country_list.index(st.session_state["aq_country"]) if st.session_state["aq_country"] in aq_country_list else 0,
@@ -4175,7 +4175,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             _aq_allowed_crops = [c for c, v in CROP_NUTRIENT_DEMAND.items()
                                  if v.get("aquaponics_suitability") in ("high", "medium")]
             _aq_crop_list = [c for c in (GREENHOUSE_CROPS if aq_plant_crop_source == "Greenhouse"
-                              else POLYTUNNEL_CROPS) if c in _aq_allowed_crops]
+                              else POLYTUNNEL_CROPS) if c in _aq_allowed_crops] # Remove emoji from caption
             if not _aq_crop_list:
                 _aq_crop_list = list(GREENHOUSE_CROPS.keys())
             st.caption("♻️ Coupled mode: only aquaponics-compatible crops shown.")
@@ -4250,7 +4250,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         st.divider()
 
         # Fish parameters
-        st.subheader("🐟 Fish Side")
+        st.subheader("Fish Side") # Remove emoji from subheader
         _aq_species_list = list(FISH_SPECIES.keys())
         aq_species = st.selectbox("Fish species", _aq_species_list,
             index=_aq_species_list.index(st.session_state["aq_species"]) if st.session_state["aq_species"] in _aq_species_list else 0,
@@ -4258,7 +4258,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
         if aq_species == "Atlantic Salmon":
             if _aq_mode == "coupled":
-                st.error("🚫 Salmon incompatible with coupled aquaponics (cold water ≤14°C vs shared loop).")
+                st.error("Salmon incompatible with coupled aquaponics (cold water ≤14°C vs shared loop).") # Remove emoji from error message
             else:
                 st.warning("⚠️ Salmon needs cold water (8–14°C). High heating costs in temperate climates.")
 
@@ -4268,7 +4268,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
         aq_system_scale = "Commercial-scale (>100m³)" if aq_tank_volume >= 100 else "Small-scale (<100m³)"
         st.session_state["aq_system_scale"] = aq_system_scale
-        st.caption(
+        st.caption( # Remove emoji from caption
             f"⚙️ System scale: **{aq_system_scale}** (auto-selected based on tank volume). "
             f"{'Commercial scale applies lower CAPEX rates per m³ due to economies of scale.' if aq_tank_volume >= 100 else 'Small-scale applies higher CAPEX rates per m³. Cross the 100 m³ threshold to unlock commercial rates.'}"
         )
@@ -4286,7 +4286,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         st.divider()
 
         # Shared parameters
-        st.subheader("⚙️ Shared")
+        st.subheader("Shared") # Remove emoji from subheader
         aq_automation = st.selectbox("Automation", ["None","Low","Medium","High"],
             index=["None","Low","Medium","High"].index(st.session_state["aq_automation"]),
             key="aq_automation")
@@ -4303,7 +4303,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             aq_coupled_efficiency = 0.88
 
         st.divider()
-        st.subheader("Advanced")
+        st.subheader("Advanced") # Remove emoji from subheader
         aq_packaging_cost    = st.number_input("Packaging ($/kg)", value=st.session_state["aq_packaging_cost"], step=0.01, min_value=0.0, key="aq_packaging_cost")
         aq_loss_rate         = st.number_input("Plant loss rate (%)", value=st.session_state["aq_loss_rate"], step=0.5, min_value=0.0, max_value=100.0, key="aq_loss_rate")
         aq_net_grow_factor   = st.number_input("Net grow factor (%)", value=st.session_state["aq_net_grow_factor"], step=1.0, min_value=1.0, max_value=100.0, key="aq_net_grow_factor")
@@ -4324,7 +4324,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         aq_real_estate_capex = st.number_input("Real estate CAPEX ($)", value=st.session_state["aq_real_estate_capex"], step=10000.0, min_value=0.0, key="aq_real_estate_capex")
 
         st.divider()
-        st.subheader("Financial Structure")
+        st.subheader("Financial Structure") # Remove emoji from subheader
         aq_dep_years  = st.number_input("Plant depreciation (yrs)", value=st.session_state["aq_depreciation_years"], step=1, min_value=1, key="aq_depreciation_years")
         aq_fish_dep   = st.number_input("Fish depreciation (yrs)", value=st.session_state["aq_fish_depreciation_years"], step=1, min_value=1, key="aq_fish_depreciation_years")
         aq_tax_rate   = st.number_input("Tax rate (%)", value=st.session_state["aq_tax_rate"], step=1.0, min_value=0.0, max_value=100.0, key="aq_tax_rate")
@@ -4335,7 +4335,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
     # ── RUN CALCULATION ───────────────────────────────────────────────────────
     if _aq_mode == "coupled" and aq_species == "Atlantic Salmon":
-        st.error("🚫 Cannot run: Atlantic Salmon is incompatible with coupled aquaponics. "
+        st.error("Cannot run: Atlantic Salmon is incompatible with coupled aquaponics. " # Remove emoji from error message
                  "Select a different species or switch to Decoupled mode.")
         st.stop()
 
@@ -4631,7 +4631,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             with _rc1:
                 st.markdown("**⚡ Electricity**")
                 _e_dir = "higher" if _el_e2["industrial"] > _mkwh2 else "lower"
-                _e_pct = abs(_el_e2["industrial"] - _mkwh2) / _mkwh2 * 100 if _mkwh2 else 0
+                _e_pct = abs(_el_e2["industrial"] - _mkwh2) / _mkwh2 * 100 if _mkwh2 else 0 # Keep warning emoji
                 if _e_flag:
                     st.warning(
                         f"Reference industrial rate: **${_el_e2['industrial']:.3f}/kWh** "
@@ -4640,7 +4640,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                     )
                 else:
                     st.success(f"Model electricity (${_mkwh2:.3f}/kWh) aligns with reference industrial rate (${_el_e2['industrial']:.3f}/kWh).")
-                st.caption(f"Source: {_el_e2['source']}" + (f" · ⚡ {_el_e2['live_note']}" if _el_e2.get("live") else ""))
+                st.caption(f"Source: {_el_e2['source']}" + (f" · {_el_e2['live_note']}" if _el_e2.get("live") else "")) # Remove emoji from caption
             with _rc2:
                 st.markdown("**👷 Labour**")
                 _l_dir = "higher" if _el_l2["industrial_loaded"] > _mlabour2 else "lower"
@@ -4650,7 +4650,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                         f"Reference fully-loaded industrial: **${_el_l2['industrial_loaded']:.0f}/hr** "
                         f"({_l_pct:.0f}% {_l_dir} than model’s ${_mlabour2:.0f}/hr). "
                         f"Overhead {_el_l2['overhead_pct']} applied (base ${_el_l2['industrial_base']:.0f}/hr)."
-                    )
+                    ) # Keep warning emoji
                 else:
                     st.success(f"Model labour (${_mlabour2:.0f}/hr) aligns with reference (${_el_l2['industrial_loaded']:.0f}/hr, overhead {_el_l2['overhead_pct']}).")
                 st.caption(f"Source: {_el_l2['source']}")
@@ -4658,9 +4658,9 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     if aq_r.get("salmon_warning"):
         st.warning(aq_r["salmon_warning"])
     if aq_r.get("ratio_warning"):
-        st.warning(aq_r["ratio_warning"])
+        st.warning(aq_r["ratio_warning"]) # Keep warning emoji
     if _aq_mode == "decoupled" and aq_r["nutrient_offset_saving"] > 0:
-        st.success(
+        st.success( # Keep emoji in success message
             f"🌿 Nutrient offset saving: **${aq_r['nutrient_offset_saving']:,.0f}/year** — "
             f"{aq_r['annual_n_output_g']/1000:.1f} kg N/yr from fish effluent "
             f"({COUPLING_PARAMS['decoupled_nutrient_offset_fraction']['base']*100:.0f}% offset applied)"
@@ -4669,7 +4669,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     # ── Multi-crop plant breakdown ────────────────────────────────────────────
     if aq_r.get("_is_multicrop") and aq_r.get("_crop_results"):
         st.divider()
-        st.subheader("Per-Crop Plant Breakdown")
+        st.subheader("Per-Crop Plant Breakdown") # Remove emoji from subheader
         _aq_mc_rows = []
         for _mc in aq_r["_crop_results"]:
             _aq_mc_rows.append({
@@ -4698,7 +4698,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
     aq_pdf_col1, aq_pdf_col2 = st.columns([5, 1])
     with aq_pdf_col2:
-        if st.button("📄 Download PDF Report", key="aq_pdf_btn", use_container_width=True):
+        if st.button("📄 Download PDF Report", key="aq_pdf_btn", use_container_width=True): # Keep emoji in button
             with st.spinner("Generating PDF..."):
                 _aq_pdf_bytes = generate_aq_pdf_report(aq_inputs, aq_r)
                 _aq_filename = (
@@ -4738,7 +4738,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                delta_color="normal",
                help="Minimum plant yield to cover all plant costs.")
     if _aq_combined_dscr is not None and _aq_combined_dscr < 1.0:
-        st.warning(
+        st.warning( # Keep warning emoji
             f"⚠️ **Combined debt service coverage is low (DSCR = {_aq_combined_dscr:.2f}x).** "
             f"Total annual debt repayment exceeds combined EBITDA. "
             f"Consider reducing LTV or extending loan terms."
@@ -4748,7 +4748,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
     # ── SIDE-BY-SIDE P&L ──────────────────────────────────────────────────────
     st.subheader("Plant vs Fish P&L")
-    _aq_pc, _aq_fc = st.columns(2)
+    _aq_pc, _aq_fc = st.columns(2) # Remove emoji from markdown
 
     with _aq_pc:
         st.markdown(f"**🌿 Plant — {aq_plant_crop}**")
@@ -4767,7 +4767,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
     with _aq_fc:
         st.markdown(f"**🐟 Fish — {aq_species}**")
-        st.caption(f"{_fr['annual_kg_fish']:,.0f} kg/yr · {_fr['cycles_per_year']} cycle(s) · ΔT={_fr['delta_t']:.0f}°C")
+        st.caption(f"{_fr['annual_kg_fish']:,.0f} kg/yr · {_fr['cycles_per_year']} cycle(s) · ΔT={_fr['delta_t']:.0f}°C") # Remove emoji from markdown
         st.dataframe(pd.DataFrame({
             "Item": ["Revenue","Feed","Fingerlings","Energy","Water","Labour","Maintenance","EBITDA","EBITDA Margin"],
             "$/year": [f"${_fr['annual_fish_revenue']:,.0f}", f"${_fr['annual_feed_cost']:,.0f}",
@@ -4781,7 +4781,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
     # ── COMBINED EBITDA BRIDGE ────────────────────────────────────────────────
     st.subheader("Combined EBITDA Bridge")
-    _aq_bl = ["Plant Revenue","Fish Revenue","Plant Costs","Fish Costs","Nutrient Saving","Combined EBITDA"]
+    _aq_bl = ["Plant Revenue","Fish Revenue","Plant Costs","Fish Costs","Nutrient Saving","Combined EBITDA"] # No emojis in _aq_bl
     _aq_bv = [_pr["annual_revenue"], _fr["annual_fish_revenue"],
                -_pr["total_annual_costs"], -_fr["total_fish_costs"],
                aq_r["nutrient_offset_saving"], aq_r["combined_ebitda"]]
@@ -4799,7 +4799,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
     # ── CAPEX ─────────────────────────────────────────────────────────────────
     st.subheader("CAPEX Breakdown")
-    _aq_cc1, _aq_cc2 = st.columns(2)
+    _aq_cc1, _aq_cc2 = st.columns(2) # Remove emoji from markdown
     with _aq_cc1:
         st.markdown(f"**🌿 Plant CAPEX — ${_pr['total_capex']:,.0f}**")
         _pcf = go.Figure(go.Pie(
@@ -4811,7 +4811,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                            font_color="#161a16",height=300,margin=dict(t=10,b=10))
         st.plotly_chart(_pcf, use_container_width=True)
     with _aq_cc2:
-        st.markdown(f"**🐟 Fish CAPEX — ${_fr['total_fish_capex']:,.0f} + Integration ${aq_r['integration_capex']:,.0f}**")
+        st.markdown(f"**🐟 Fish CAPEX — ${_fr['total_fish_capex']:,.0f} + Integration ${aq_r['integration_capex']:,.0f}**") # Remove emoji from markdown
         _fcf = go.Figure(go.Pie(
             labels=["Tanks","Filtration","Aeration","Monitoring","Plumbing"],
             values=[_fr["tank_capex"],_fr["filtration_capex"],_fr["aeration_capex"],
@@ -4825,7 +4825,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
     # ── Annual cost breakdown (plant side) ───────────────────────────────────
     st.subheader("Plant Annual Cost Breakdown")
-    _aq_cost_fig = go.Figure(go.Pie(
+    _aq_cost_fig = go.Figure(go.Pie( # Remove emoji from markdown
         labels=["Energy", "Variable", "Water", "Labour", "Maintenance", "Rent"],
         values=[_pr["annual_energy_cost"], _pr["annual_variable_cost"],
                 _pr["annual_water_cost"], _pr["annual_labour_cost"],
@@ -4843,7 +4843,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     st.subheader("Cumulative NPV — 10-year DCF")
     _dcf_col1, _dcf_col2 = st.columns(2)
 
-    with _dcf_col1:
+    with _dcf_col1: # Remove emoji from markdown
         st.markdown("**🌿 Plant Side**")
         _pdcf = go.Figure()
         _pdcf.add_trace(go.Scatter(
@@ -4859,7 +4859,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             margin=dict(t=10, b=10))
         st.plotly_chart(_pdcf, use_container_width=True)
 
-    with _dcf_col2:
+    with _dcf_col2: # Remove emoji from markdown
         st.markdown("**🐟 Fish Side**")
         _fdcf = go.Figure()
         _fdcf.add_trace(go.Scatter(
@@ -4879,7 +4879,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
 
     # ── FULL RESULTS ──────────────────────────────────────────────────────────
     st.subheader("Full Results")
-    _frt1, _frt2 = st.tabs(["🌿 Plant Detail", "🐟 Fish Detail"])
+    _frt1, _frt2 = st.tabs(["🌿 Plant Detail", "🐟 Fish Detail"]) # Keep emojis in tab labels
     with _frt1:
         st.dataframe(pd.DataFrame({
             "Metric": ["Effective Grow Area (m²)","Gross Area (m²)","Structure Type",
@@ -5193,7 +5193,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     # ── SAVE AS FARM PROFILE ──────────────────────────────────────────────────
     aq_save_col1, aq_save_col2 = st.columns([5, 1])
     with aq_save_col2:
-        if st.button("💾 Save as Farm Profile", key="aq_save_btn", use_container_width=True):
+        if st.button("💾 Save as Farm Profile", key="aq_save_btn", use_container_width=True): # Keep emoji in button
             st.session_state["aq_show_save_form"] = True
 
     if st.session_state["aq_show_save_form"]:
@@ -5204,7 +5204,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             _climate_data = {}
             if _save_lat and _save_lon:
                 with st.spinner("🌤️ Fetching climate profile for this location…"):
-                    try:
+                    try: # Keep emoji in spinner
                         from core.climate import fetch_climate_profile
                         _climate_data = fetch_climate_profile(_save_lat, _save_lon)
                     except Exception:
@@ -5264,7 +5264,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                 _au1, _au2, _au3 = st.columns([2, 2, 1])
                 with _au1:
                     if st.button("✅ Update existing farm", use_container_width=True, key="aq_update_btn"):
-                        try:
+                        try: # Keep emoji in success message
                             supabase.table("farms").update(_aq_payload).eq("id", _aq_active["id"]).execute()
                             st.session_state["active_farm"] = {**_aq_active, **_aq_payload}
                             st.success(f"✅ Farm **{_aq_active['name']}** updated.")
@@ -5278,7 +5278,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                     aq_farm_name = st.text_input("New farm name", key="aq_farm_name_input", placeholder="Enter name for new profile")
                     if st.button("➕ Save as new farm", use_container_width=True, key="aq_saveas_btn"):
                         if not aq_farm_name.strip():
-                            st.error("Please enter a name for the new farm profile.")
+                            st.error("Please enter a name for the new farm profile.") # Keep emoji in success message
                         else:
                             try:
                                 supabase.table("farms").insert({**_aq_payload, "name": aq_farm_name.strip(), "owner_id": current_user()}).execute()

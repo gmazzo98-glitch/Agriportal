@@ -27,7 +27,7 @@ from supabase import create_client, Client
 from core._styles import inject_styles
 from core.farm_context import render_farm_context_sidebar
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════ # Keep page_icon emoji, but remove from title
 # SHARED UTILITIES
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -711,7 +711,7 @@ st.set_page_config(page_title="Farm Intelligence Map", page_icon="🗺️", layo
 inject_styles()
 from core.auth import require_login
 require_login()
-st.title("🗺️ Farm Intelligence Map")
+st.title("Farm Intelligence Map")
 st.markdown(
     "Explore your farm's environment through multiple intelligence layers. "
     "Click anywhere on the map to set or change the search origin. "
@@ -802,7 +802,7 @@ if st.session_state["fim_pending_lat"] is not None:
     matched_country = COUNTRY_CODE_MAP.get(detected_code)
 
     with st.container(border=True):
-        st.markdown(f"**📍 New location selected: `{plat:.4f}, {plng:.4f}`**")
+        st.markdown(f"**New location selected: `{plat:.4f}, {plng:.4f}`**")
 
         if detected_country:
             if matched_country and matched_country in COUNTRIES:
@@ -856,7 +856,7 @@ with st.sidebar:
     st.markdown("Powered by **OpenStreetMap** — free, no API key required.")
     st.divider()
 
-    st.markdown(f"**📍 Current origin:** `{lat:.4f}, {lng:.4f}`")
+    st.markdown(f"**Current origin:** `{lat:.4f}, {lng:.4f}`")
     st.caption("Click anywhere on the map to move the search origin.")
 
     # Show active farm indicator and offer to jump to its location
@@ -864,7 +864,7 @@ with st.sidebar:
     if _active_farm:
         st.divider()
         st.markdown(f"**🏭 Active farm:** {_active_farm['name']}")
-        if _active_farm.get("lat") and _active_farm.get("lon"):
+        if _active_farm.get("lat") and _active_farm.get("lon"): # Keep emoji in badge
             st.caption(f"📍 `{_active_farm['lat']:.4f}, {_active_farm['lon']:.4f}`")
         else:
             st.caption("No coordinates saved for this farm yet.")
@@ -880,9 +880,9 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    st.markdown("**🗂️ Active Layers**")
-    layer_waste     = st.checkbox("♻️ Circular Economy / Waste Sources", value=True)
-    layer_logistics = st.checkbox("🚛 Logistics Infrastructure",         value=True)
+    st.markdown("**Active Layers**")
+    layer_waste     = st.checkbox("♻️ Circular Economy / Waste Sources", value=True) # Keep emoji in checkbox
+    layer_logistics = st.checkbox("🚛 Logistics Infrastructure",         value=True) # Keep emoji in checkbox
     # layer_climate = st.checkbox("🌤️ Climate / Meteorological", value=False)  # Layer 3 placeholder
 
     st.divider()
@@ -890,7 +890,7 @@ with st.sidebar:
     radius_m  = radius_km * 1000
 
     st.divider()
-
+    
     # Layer-specific filters
     if layer_waste:
         all_waste_types = sorted(set(
@@ -898,7 +898,7 @@ with st.sidebar:
             [v[1] for v in TAG_WASTE_MAP.values()]
         ))
         selected_waste_types = st.multiselect(
-            "♻️ Filter waste types:", options=all_waste_types, default=[],
+            "♻️ Filter waste types:", options=all_waste_types, default=[], # Keep emoji in multiselect
             placeholder="All waste types shown",
         )
     else:
@@ -907,7 +907,7 @@ with st.sidebar:
     if layer_logistics:
         all_infra_types  = sorted(set(label for _, _, label, _, _ in INFRA_TYPES))
         selected_infra_types = st.multiselect(
-            "🚛 Filter infrastructure types:", options=all_infra_types, default=[],
+            "🚛 Filter infrastructure types:", options=all_infra_types, default=[], # Keep emoji in multiselect
             placeholder="All types shown",
         )
     else:
@@ -915,13 +915,13 @@ with st.sidebar:
 
     st.divider()
     search_clicked = st.button("🔍 Search All Active Layers", use_container_width=True)
-    st.caption("**Data:** OpenStreetMap contributors via Overpass API.")
+    st.caption("**Data:** OpenStreetMap contributors via Overpass API.") # Keep emoji in button
 
     # ── Search execution ──────────────────────────────────────────────────────────
     if search_clicked:
         # Clear old caches instantly so ghost data doesn't persist if a massive query fails
         st.session_state["fim_waste_df"] = None
-        st.session_state["fim_logistics_df"] = None
+        st.session_state["fim_logistics_df"] = None # Keep emojis in spinner
         
         if layer_waste:
             with st.spinner("♻️ Querying waste sources (may take up to 90s for large radius)…"):
@@ -943,7 +943,7 @@ with st.sidebar:
 
         st.rerun()
 
-    with st.expander("📍 Location Suitability Finder", expanded=False):
+    with st.expander("Location Suitability Finder", expanded=False): # Remove emoji from expander title
         st.caption(
             "Select up to 3 targets. The map will automatically search a wide radius, "
             "pinpoint the closest matches, and draw their suitability zones."
@@ -983,7 +983,7 @@ if st.session_state.get("fim_suitability_active", False):
     for _i in range(3):
         _target = st.session_state.get(f"fim_suit_target_{_i}", "None / Skip")
         if _target and _target != "None / Skip":
-            with st.spinner(f"📍 Locating nearest: {_target}…"):
+            with st.spinner(f"Locating nearest: {_target}…"): # Remove emoji from spinner
                 _suit_results[_i] = find_triangulation_target(
                     _target, lat, lng, _search_radius_km,
                     st.session_state.get("fim_waste_df"),
@@ -997,7 +997,7 @@ else:
 
 # ── Map (always visible) ──────────────────────────────────────────────────────
 
-st.subheader("📍 Intelligence Map")
+st.subheader("Intelligence Map") # Remove emoji from subheader
 st.caption("Click anywhere on the map to move the search origin, then confirm.")
 
 # Centre on pending location if one exists, so the map does not jump back on rerun
@@ -1006,7 +1006,7 @@ _map_center_lng = st.session_state.get("fim_pending_lng") or lng
 m = folium.Map(location=[_map_center_lat, _map_center_lng], zoom_start=12, tiles="CartoDB dark_matter")
 
 # Origin marker — shows current confirmed origin
-folium.Marker(
+folium.Marker( # Keep icon
     location=[lat, lng],
     tooltip="Current search origin",
     popup="Current search origin",
@@ -1016,7 +1016,7 @@ folium.Marker(
 # Pending marker — shows clicked location awaiting confirmation
 if st.session_state.get("fim_pending_lat") is not None:
     plat_preview = st.session_state["fim_pending_lat"]
-    plng_preview = st.session_state["fim_pending_lng"]
+    plng_preview = st.session_state["fim_pending_lng"] # Keep icon
     folium.Marker(
         location=[plat_preview, plng_preview],
         tooltip=f"📍 Pending: {plat_preview:.4f}, {plng_preview:.4f} — confirm below",
@@ -1051,7 +1051,7 @@ if st.session_state.get("fim_suitability_active", False):
         if _target != "None / Skip" and nearest_data:
             _slat  = nearest_data["lat"]
             _slng  = nearest_data["lon"]
-            _sname = nearest_data["name"]
+            _sname = nearest_data["name"] # Keep icon
             folium.Circle(
                 location=[_slat, _slng],
                 radius=_srad,
@@ -1062,7 +1062,7 @@ if st.session_state.get("fim_suitability_active", False):
                 dash_array="4",
                 tooltip=f"Suitability zone: {_sname} (≤ {_srad//1000} km)",
             ).add_to(m)
-            folium.Marker(
+            folium.Marker( # Keep icon
                 location=[_slat, _slng],
                 tooltip=f"📌 {_target}: {_sname}",
                 icon=folium.Icon(color="red" if _i==0 else ("orange" if _i==1 else "green"), icon="map-pin", prefix="fa"),
@@ -1070,7 +1070,7 @@ if st.session_state.get("fim_suitability_active", False):
 
 # Active farm pin — shown as a flag marker distinct from the search origin
 _active_farm_map = st.session_state.get("active_farm")
-if _active_farm_map and _active_farm_map.get("lat") and _active_farm_map.get("lon"):
+if _active_farm_map and _active_farm_map.get("lat") and _active_farm_map.get("lon"): # Keep icon
     folium.Marker(
         location=[_active_farm_map["lat"], _active_farm_map["lon"]],
         tooltip=f"🏭 {_active_farm_map['name']} (active farm)",
@@ -1087,7 +1087,7 @@ if _active_farm_map and _active_farm_map.get("lat") and _active_farm_map.get("lo
 waste_cached = st.session_state.get("fim_waste_df")
 if layer_waste and waste_cached is not None and not waste_cached.empty:
     for _, row in waste_cached.iterrows():
-        hex_color = INDUSTRY_COLORS.get(row["Predicted Industry"], "#505050")
+        hex_color = INDUSTRY_COLORS.get(row["Predicted Industry"], "#505050") # Keep emoji in tooltip and popup
         folium.CircleMarker(
             location=[row["lat"], row["lon"]],
             radius=7,
@@ -1107,7 +1107,7 @@ if layer_waste and waste_cached is not None and not waste_cached.empty:
 logistics_cached = st.session_state.get("fim_logistics_df")
 if layer_logistics and logistics_cached is not None and not logistics_cached.empty:
     for _, row in logistics_cached.iterrows():
-        folium.CircleMarker(
+        folium.CircleMarker( # Keep emoji in tooltip and popup
             location=[row["lat"], row["lon"]],
             radius=9,
             color=row["color"], fill=True, fill_color=row["color"], fill_opacity=0.75,
@@ -1136,10 +1136,10 @@ if map_result and map_result.get("last_clicked"):
 
 # Combined legend
 legend_html = ""
-if layer_waste and waste_cached is not None and not waste_cached.empty:
+if layer_waste and waste_cached is not None and not waste_cached.empty: # Keep emojis in legend
     for ind in sorted(waste_cached["Predicted Industry"].unique()):
         c = INDUSTRY_COLORS.get(ind, "#505050")
-        legend_html += f'<span style="margin-right:14px;white-space:nowrap;"><span style="color:{c};font-size:16px;">●</span> ♻️ {ind}</span>'
+        legend_html += f'<span style="margin-right:14px;white-space:nowrap;"><span style="color:{c};font-size:16px;">●</span> ♻️ {ind}</span> # Keep emoji in legend
 if layer_logistics and logistics_cached is not None and not logistics_cached.empty:
     for t in sorted(logistics_cached["Type"].unique()):
         c = COLOUR_BY_LABEL.get(t, "#969696")
@@ -1153,7 +1153,7 @@ if legend_html:
 st.divider()
 
 if waste_cached is None and logistics_cached is None:
-    st.info("👈 Toggle the layers you want in the sidebar, set your radius, and click **Search**.")
+    st.info("Toggle the layers you want in the sidebar, set your radius, and click **Search**.") # Remove emoji from info message
     st.stop()
 
 # ── Save Results to Farm Profile ──────────────────────────────────────────────
@@ -1161,7 +1161,7 @@ active_farm = st.session_state.get("active_farm")
 if active_farm and (waste_cached is not None or logistics_cached is not None):
     _meta_check   = active_farm.get("metadata") or {}
     _has_saved_w  = "fim_waste_data"     in _meta_check and bool(_meta_check["fim_waste_data"])
-    _has_saved_l  = "fim_logistics_data" in _meta_check and bool(_meta_check["fim_logistics_data"])
+    _has_saved_l  = "fim_logistics_data" in _meta_check and bool(_meta_check["fim_logistics_data"]) # Remove emoji from markdown
     _has_any_saved = _has_saved_w or _has_saved_l
 
     st.markdown(f"**💾 Intelligence Data — Farm Profile: `{active_farm['name']}`**")
@@ -1174,7 +1174,7 @@ if active_farm and (waste_cached is not None or logistics_cached is not None):
     else:
         st.caption("Save current results to the farm profile — they will reload instantly next time without re-running the search.")
 
-    _sc1, _sc2 = st.columns([2, 1])
+    _sc1, _sc2 = st.columns([2, 1]) # Keep emoji in button
     with _sc1:
         if st.button("💾 Save / Overwrite to Database", type="primary", use_container_width=True):
             with st.spinner("Saving to Supabase..."):
@@ -1227,7 +1227,7 @@ if active_farm and (waste_cached is not None or logistics_cached is not None):
 # ═════════════════════════════════════════════════════════════════════════════
 
 active_tabs  = []
-if layer_waste     and waste_cached     is not None: active_tabs.append("♻️ Waste Sources")
+if layer_waste     and waste_cached     is not None: active_tabs.append("♻️ Waste Sources") # Keep emoji in tab label
 if layer_logistics and logistics_cached is not None: active_tabs.append("🚛 Logistics")
 
 if not active_tabs:
@@ -1270,7 +1270,7 @@ if layer_waste and waste_cached is not None:
             if matched > 0:
                 top_wastes   = waste_counts.nlargest(3, "Count")["Waste Stream"].tolist()
                 avg_distance = df_w[df_w["Predicted Industry"] != "Unknown / Other"]["Distance (km)"].mean()
-                closest      = df_w[df_w["Predicted Industry"] != "Unknown / Other"].iloc[0]
+                closest      = df_w[df_w["Predicted Industry"] != "Unknown / Other"].iloc[0] # Keep emoji in info message
                 st.info(
                     f"📊 Within **{radius_km} km**: **{total}** facilities, **{matched}** waste-matched "
                     f"across **{unique_waste}** categories. Top streams: **{', '.join(top_wastes)}**. "
@@ -1358,7 +1358,7 @@ if layer_logistics and logistics_cached is not None:
             )
 
             st.caption("📍 Nearest key infrastructure from current origin")
-            nearest_infra = compute_nearest_by_category(logistics_cached)
+            nearest_infra = compute_nearest_by_category(logistics_cached) # Remove emoji from caption
             if nearest_infra:
                 cols = st.columns(7)
                 for i, item in enumerate(nearest_infra):
