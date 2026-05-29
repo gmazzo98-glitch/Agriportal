@@ -4,7 +4,7 @@ st.set_page_config(page_title="Assumptions & Methodology", page_icon="📋", lay
 from core.auth import require_login, render_user_admin, logout, current_user
 require_login() # Keep the page_icon emoji, but remove from title # Keep the page_icon emoji, but remove from title
 
-st.title("umptions & Methodology")
+st.title("Assumptions & Methodology")
 st.markdown(
     "This page documents every data source, formula assumption, and modelling choice "
     "used in the ROI Calculator. It exists so that users — whether farmers, investors, "
