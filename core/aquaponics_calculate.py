@@ -112,10 +112,10 @@ def calculate_fish(inputs: dict, mode: str = "decoupled") -> dict:
 
     # ── SECTION 5 — FEED COST ────────────────────────────────────────────────
     annual_feed_kg   = annual_kg_fish * sd["feed_conversion_ratio"]
-    annual_feed_cost = annual_feed_kg * sd["feed_cost_per_kg"]
+    annual_feed_cost = annual_feed_kg * sd["feed_cost_per_kg"] * country_data.get("feed_cost_index", 1.0)
 
     # ── SECTION 6 — FINGERLING COST ──────────────────────────────────────────
-    annual_fingerling_cost = fish_per_batch * sd["fingerling_cost"] * cycles_per_year
+    annual_fingerling_cost = fish_per_batch * sd["fingerling_cost"] * country_data.get("fingerling_cost_index", 1.0) * cycles_per_year
 
     # ── SECTION 7 — ENERGY COST ──────────────────────────────────────────────
     # Aeration: production-based benchmark scaled by species O2 demand relative to Tilapia
