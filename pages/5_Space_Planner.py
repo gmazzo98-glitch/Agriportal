@@ -25,6 +25,11 @@ with st.sidebar:
     render_farm_context_sidebar(supabase=supabase)
     st.markdown("### 🏗️ Space Planner")
     st.caption("Design your farm layout in 2D and 3D. Save to link with financials and crop cycles.")
+    st.page_link(
+        "pages/3_Farm_Intelligence_Map.py",
+        label="🗺️ View location in Intelligence Map",
+        icon="🗺️",
+    )
 
 active_farm = get_active_farm()
 
@@ -60,6 +65,15 @@ if active_farm:
             _model_snap = json.loads(_ms_raw) if isinstance(_ms_raw, str) else (_ms_raw or {})
         except Exception:
             _model_snap = {}
+    # Look up country electricity rate for KPI panel
+    _country_kwh = 0.20  # fallback
+    try:
+        from core.energy_labour import get_rates_for_country_name as _get_el_rates
+        _el_lookup = _get_el_rates(active_farm.get("country", ""))
+        _country_kwh = float(_el_lookup["energy"].get("industrial") or 0.20)
+    except Exception:
+        pass
+
     _farm_js = json.dumps({
         "id":             active_farm.get("id"),
         "name":           active_farm.get("name", "My Farm"),
@@ -67,6 +81,7 @@ if active_farm:
         "footprint":      float(active_farm.get("footprint") or active_farm.get("plant_footprint") or 0),
         "levels":         int(active_farm.get("levels") or 1),
         "country":        active_farm.get("country", ""),
+        "country_kwh":    _country_kwh,
         "metadata":       json.loads(active_farm.get("metadata", "{}")) if isinstance(active_farm.get("metadata"), str) else active_farm.get("metadata", {}),
         "price_override": float(active_farm.get("price_override") or 0),
         "net_grow_factor":float(active_farm.get("net_grow_factor") or 0.85),
@@ -371,8 +386,12 @@ def _render_consistency_panel(conflicts: list, farm: dict, layout_metrics: dict)
                             if st.session_state.get("active_farm"):
                                 st.session_state["active_farm"][_cf["sync_key"]] = _cf["sync_val"]
                             st.success(
-                                f"✅ **{_cf['field']}** updated to {_cf['layout_val']} in the financial model. "
-                                f"Re-run the ROI Calculator to see updated projections."
+                                f"✅ **{_cf['field']}** updated to {_cf['layout_val']} in the financial model."
+                            )
+                            st.page_link(
+                                "pages/1_ROI_Calculator.py",
+                                label="→ Go to ROI Calculator to recalculate",
+                                icon="📊",
                             )
                             st.rerun()
                         except Exception as _se:
@@ -1456,11 +1475,23 @@ def garden_planner():
             _populateScCropSelect(selection);
             // Pre-fill area from rack/tank
             if (selection) {
-                const area = selection.type === 'tank' ? (selection.w * selection.h * (selection.height || 1.5)) : (selection.w * selection.h * (selection.layers || 1));
+                let area;
+                if (selection.type === 'tank') {
+                    area = selection.w * selection.h * (selection.height || 1.5);
+                } else if (selection.rackType === 'wall') {
+                    // Wall rack: grow area = wall length × rack height (not floor footprint × layers)
+                    area = Math.max(selection.w, selection.h) * (selection.height || 2.4);
+                } else {
+                    area = selection.w * selection.h * (selection.layers || 1);
+                }
                 const areaEl = document.getElementById('sc-area');
                 if (areaEl) {
                     areaEl.value = area.toFixed(1);
-                    areaEl.previousElementSibling.innerHTML = selection.type === 'tank' ? `Volume (m³) <span style="color:#555;">(auto from tank)</span>` : `Area (m²) <span style="color:#555;">(auto from rack)</span>`;
+                    areaEl.previousElementSibling.innerHTML = selection.type === 'tank'
+                        ? `Volume (m³) <span style="color:#555;">(auto from tank)</span>`
+                        : selection.rackType === 'wall'
+                            ? `Area (m²) <span style="color:#74c0fc;">(wall: length × height)</span>`
+                            : `Area (m²) <span style="color:#555;">(auto from rack)</span>`;
                 }
             }
             // Default dates
@@ -1542,13 +1573,17 @@ def garden_planner():
                 // If rack has layers, also insert rack_layer_assignments for all layers
                 if (newId && rackName && selection && selection.layers > 0) {
                     const layerRows = [];
+                    // Layer area: wall racks use wall_length × rack_height per layer; standard uses floor footprint
+                    const _layerAreaM2 = (selection.rackType === 'wall')
+                        ? parseFloat((Math.max(selection.w, selection.h) * (selection.height || 2.4)).toFixed(2))
+                        : parseFloat((selection.w * selection.h).toFixed(2));
                     for (let i = 0; i < selection.layers; i++) {
                         layerRows.push({
                             farm_id:     FARM_DATA.id,
                             cycle_id:    newId,
                             rack_name:   rackName,
                             layer_index: i,
-                            area_m2:     parseFloat(((selection.w * selection.h)).toFixed(2)),
+                            area_m2:     _layerAreaM2,
                         });
                     }
                     await fetch(
@@ -1835,10 +1870,11 @@ def garden_planner():
                     document.getElementById('kpi-revenue').innerText      = '€' + Math.round(modelRev).toLocaleString() + '/yr (est)';
                 }
 
-                // Energy estimate
-                const isVF = !FARM_DATA || (FARM_DATA.modality === 'vertical_farm');
+                // Energy estimate — uses actual country industrial electricity rate from energy_labour module
+                const isVF        = !FARM_DATA || (FARM_DATA.modality === 'vertical_farm');
                 const kwh_per_m2_yr = isVF ? (200 * 8760 / 1000) : (50 * 4380 / 1000);
-                const energyCost = canopy * kwh_per_m2_yr * 0.25;
+                const _kwh_rate   = (FARM_DATA && FARM_DATA.country_kwh > 0) ? FARM_DATA.country_kwh : 0.20;
+                const energyCost  = canopy * kwh_per_m2_yr * _kwh_rate;
                 const revForMargin = hasLiveData ? liveRevYear : modelRev;
                 const margin = revForMargin > 0 ? ((revForMargin - energyCost) / revForMargin * 100) : 0;
                 document.getElementById('kpi-energy').innerText       = '€' + Math.round(energyCost).toLocaleString() + '/yr';
