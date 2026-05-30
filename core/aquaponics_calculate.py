@@ -26,6 +26,7 @@ COUNTRY_AMBIENT_TEMP = {
     "Indonesia": 27.0, "Australia": 21.8, "New Zealand": 12.5,
     "India": 24.7, "Morocco": 17.5, "Egypt": 22.0, "South Africa": 17.5,
     "Kenya": 19.0,
+    "Guyana": 26.3,
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

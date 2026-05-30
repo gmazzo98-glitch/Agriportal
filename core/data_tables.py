@@ -113,6 +113,7 @@ COUNTRY_CODE_MAP = {
     "ZA": "South Africa",
     "MX": "Mexico",
     "AR": "Argentina",
+    "GY": "Guyana",
 }
 
 COUNTRIES = {
@@ -197,6 +198,7 @@ COUNTRIES = {
     "Ecuador":                   {"kwh": 0.09,  "labour": 4.50,   "food_index": 0.70, "feed_cost_index": 0.72, "fingerling_cost_index": 0.65},
     "El Salvador":               {"kwh": 0.22,  "labour": 3.80,   "food_index": 0.75, "feed_cost_index": 0.90, "fingerling_cost_index": 0.85},
     "Guatemala":                 {"kwh": 0.20,  "labour": 3.50,   "food_index": 0.72, "feed_cost_index": 0.88, "fingerling_cost_index": 0.85},
+    "Guyana":                    {"kwh": 0.24,  "labour": 4.212,  "food_index": 0.88, "feed_cost_index": 0.95, "fingerling_cost_index": 0.90},
     "Haiti":                     {"kwh": 0.35,  "labour": 1.10,   "food_index": 0.45, "feed_cost_index": 2.00, "fingerling_cost_index": 1.80},
     "Honduras":                  {"kwh": 0.23,  "labour": 3.10,   "food_index": 0.70, "feed_cost_index": 0.85, "fingerling_cost_index": 0.80},
     "Jamaica":                   {"kwh": 0.30,  "labour": 4.50,   "food_index": 0.95, "feed_cost_index": 1.60, "fingerling_cost_index": 1.50},

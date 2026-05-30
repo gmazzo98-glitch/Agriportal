@@ -110,6 +110,7 @@ COUNTRY_NAME_TO_ISO = {
     "New Zealand":         "NZ",
     "Ukraine":             "UA",
     "Argentina":           "AR",
+    "Guyana":              "GY",
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
