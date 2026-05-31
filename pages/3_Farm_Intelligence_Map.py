@@ -1032,7 +1032,14 @@ with st.sidebar:
         _wdf = st.session_state.get("fim_waste_df")
         _ldf = st.session_state.get("fim_logistics_df")
         _af  = st.session_state.get("active_farm") or {}
-        _meta = _af.get("metadata") or {}
+        _raw_meta = _af.get("metadata") or {}
+        if isinstance(_raw_meta, str):
+            import json as _json
+            try:
+                _raw_meta = _json.loads(_raw_meta)
+            except Exception:
+                _raw_meta = {}
+        _meta = _raw_meta if isinstance(_raw_meta, dict) else {}
 
         st.markdown(f"**Farm:** `{_af.get('name','—')}` id=`{_af.get('id','—')}`")
         st.markdown(f"**Synced farm id:** `{st.session_state.get('fim_synced_farm_id','—')}`")

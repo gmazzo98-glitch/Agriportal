@@ -306,6 +306,16 @@ def _css() -> str:
       [data-testid="stExpander"] summary:hover, [data-testid="stExpander"] summary:hover p {{
         color: var(--sage);
       }}
+      /* Force dark text for EVERYTHING inside expanders in the sidebar since they have a white background */
+      [data-testid="stSidebar"] [data-testid="stExpander"] *,
+      [data-testid="stSidebar"] [data-testid="stExpander"] p,
+      [data-testid="stSidebar"] [data-testid="stExpander"] span,
+      [data-testid="stSidebar"] [data-testid="stExpander"] div,
+      [data-testid="stSidebar"] [data-testid="stExpander"] li,
+      [data-testid="stSidebar"] [data-testid="stExpander"] label,
+      [data-testid="stSidebar"] [data-testid="stExpander"] code {{
+        color: var(--ink) !important;
+      }}
 
       /* ── Metrics — the showpiece. Big, mono, tabular numerics. ──────── */
       [data-testid="stMetric"] {{
