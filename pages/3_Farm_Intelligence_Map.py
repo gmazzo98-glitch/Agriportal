@@ -1008,50 +1008,6 @@ with st.sidebar:
     search_clicked = st.button("🔍 Search All Active Layers", use_container_width=True)
     st.caption("**Data:** OpenStreetMap contributors via Overpass API.") # Keep emoji in button
 
-    # ── Search execution ──────────────────────────────────────────────────────────
-    if search_clicked:
-        # Clear old caches instantly so ghost data doesn't persist if a massive query fails
-        st.session_state["fim_waste_df"] = None
-        st.session_state["fim_logistics_df"] = None # Keep emojis in spinner
-        # Warn user about expected query time at large radii
-        if radius_km > 40:
-            st.warning(
-                f"⏳ Large search radius ({radius_km} km) — this may take 60–90 seconds. "
-                "If the search times out, reduce the radius and try again.",
-                icon="⚠️",
-            )
-        elif radius_km > 20:
-            st.info(f"⏳ Querying {radius_km} km radius — expect 20–40 seconds.")
-        
-        if layer_waste:
-            with st.spinner("♻️ Querying waste sources (may take up to 90s for large radius)…"):
-                try:
-                    elements = fetch_waste_layer(lat, lng, radius_m)
-                    df_w     = build_waste_dataframe(elements, lat, lng)
-                    st.session_state["fim_waste_df"] = df_w
-                except Exception as e:
-                    st.error(f"Waste layer error: {e}")
-
-        if layer_logistics:
-            with st.spinner("🚛 Querying logistics infrastructure…"):
-                try:
-                    elements = fetch_logistics_layer(lat, lng, radius_m)
-                    df_l     = build_logistics_dataframe(elements, lat, lng)
-                    st.session_state["fim_logistics_df"] = df_l
-                except Exception as e:
-                    st.error(f"Logistics layer error: {e}")
-
-        # Auto-save to Supabase if a farm is active — no user action required
-        _af = st.session_state.get("active_farm")
-        if _af:
-            _autosave_fim_to_supabase(
-                _af,
-                st.session_state.get("fim_waste_df"),
-                st.session_state.get("fim_logistics_df"),
-            )
-
-        st.rerun()
-
     with st.expander("Location Suitability Finder", expanded=False): # Remove emoji from expander title
         st.caption(
             "Select up to 3 targets. The map will automatically search a wide radius, "
@@ -1260,6 +1216,48 @@ if legend_html:
     )
 
 st.divider()
+
+# ── Search execution (Deferred until after map rendering to prevent map disappearance) ──
+if search_clicked:
+    # Clear old caches instantly so ghost data doesn't persist if a massive query fails
+    st.session_state["fim_waste_df"] = None
+    st.session_state["fim_logistics_df"] = None
+
+    with st.sidebar:
+        # Warn user about expected query time at large radii
+        if radius_km > 40:
+            st.warning(
+                f"⏳ Large search radius ({radius_km} km) — this may take 60–90 seconds. "
+                "If the search times out, reduce the radius and try again.",
+                icon="⚠️",
+            )
+        elif radius_km > 20:
+            st.info(f"⏳ Querying {radius_km} km radius — expect 20–40 seconds.")
+        
+        if layer_waste:
+            with st.spinner("♻️ Querying waste sources (may take up to 90s for large radius)…"):
+                try:
+                    elements = fetch_waste_layer(lat, lng, radius_m)
+                    df_w     = build_waste_dataframe(elements, lat, lng)
+                    st.session_state["fim_waste_df"] = df_w
+                except Exception as e:
+                    st.error(f"Waste layer error: {e}")
+
+        if layer_logistics:
+            with st.spinner("🚛 Querying logistics infrastructure…"):
+                try:
+                    elements = fetch_logistics_layer(lat, lng, radius_m)
+                    df_l     = build_logistics_dataframe(elements, lat, lng)
+                    st.session_state["fim_logistics_df"] = df_l
+                except Exception as e:
+                    st.error(f"Logistics layer error: {e}")
+
+        # Auto-save to Supabase if a farm is active — no user action required
+        _af = st.session_state.get("active_farm")
+        if _af:
+            _autosave_fim_to_supabase(_af, st.session_state.get("fim_waste_df"), st.session_state.get("fim_logistics_df"))
+
+    st.rerun()
 
 if waste_cached is None and logistics_cached is None:
     st.info("Toggle the layers you want in the sidebar, set your radius, and click **Search**.") # Remove emoji from info message
