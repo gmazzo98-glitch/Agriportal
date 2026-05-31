@@ -322,6 +322,14 @@ def _render_farm_setup():
         else:
             st.caption("Allocate 100% across crops. Use the + button to add crops.")
             _saved_mix = _data.get("crop_mix", [{"crop": _default_crop, "pct": 100}])
+            # Migration: rename Sweet Pepper inside crop mix
+            for _m_row in _saved_mix:
+                if _m_row.get("crop") == "Sweet Pepper":
+                    if _crop_source == "Polytunnel":
+                        _m_row["crop"] = "Sweet Pepper (Polytunnel)"
+                    else:
+                        _m_row["crop"] = "Sweet Pepper (GH Substrate)"
+
             _n_crops   = st.number_input("Number of crops", min_value=2, max_value=6,
                                           value=max(2, len(_saved_mix)), step=1, key="fs_n_crops")
             _crop_mix  = []

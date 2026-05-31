@@ -1445,6 +1445,14 @@ if "_pending_farm_load" in st.session_state:
         try:
             _parsed_attempt = json.loads(_pf_mix_raw) if isinstance(_pf_mix_raw, str) else _pf_mix_raw
             if isinstance(_parsed_attempt, list) and _parsed_attempt:
+                # Migration: rename Sweet Pepper inside crop mix
+                for _m_row in _parsed_attempt:
+                    if _m_row.get("crop") == "Sweet Pepper":
+                        _pf_src = (_pf.get("crop_source") or "greenhouse").lower()
+                        if _pf_src == "polytunnel":
+                            _m_row["crop"] = "Sweet Pepper (Polytunnel)"
+                        else:
+                            _m_row["crop"] = "Sweet Pepper (GH Substrate)"
                 _pf_parsed_mix = _parsed_attempt
         except Exception:
             pass
@@ -1530,10 +1538,12 @@ if "_pending_farm_load" in st.session_state:
     _gh_valid_dict      = POLYTUNNEL_CROPS if _gh_crop_source_val == "Polytunnel" else GREENHOUSE_CROPS
     _gh_crop_fallback   = _pf.get("crop", "Tomato (Beef)")
     # Migration: rename Sweet Pepper to modality-specific name after data_tables rename
-    _gh_crop_fallback   = (
-        "Sweet Pepper (GH Substrate)" if _gh_crop_fallback == "Sweet Pepper"
-        else _gh_crop_fallback
-    )
+    if _gh_crop_fallback == "Sweet Pepper":
+        if _gh_crop_source_val == "Polytunnel":
+            _gh_crop_fallback = "Sweet Pepper (Polytunnel)"
+        else:
+            _gh_crop_fallback = "Sweet Pepper (GH Substrate)"
+
     _gh_valid_fallback  = _gh_crop_fallback if _gh_crop_fallback in _gh_valid_dict else list(_gh_valid_dict.keys())[0]
     st.session_state["gh_country"]            = _pf.get("country", "Germany")
     st.session_state["gh_crop"]               = _gh_valid_fallback
@@ -1572,10 +1582,12 @@ if "_pending_farm_load" in st.session_state:
     # ── AQ keys ───────────────────────────────────────────────────────────────
     _aq_crop_fallback = _pf.get("crop", "Lettuce (Romaine)")
     # Migration: same rename guard for aquaponics plant-side load
-    _aq_crop_fallback = (
-        "Sweet Pepper (GH Substrate)" if _aq_crop_fallback == "Sweet Pepper"
-        else _aq_crop_fallback
-    )
+    if _aq_crop_fallback == "Sweet Pepper":
+        if (_pf.get("crop_source") or "greenhouse").lower() == "polytunnel":
+            _aq_crop_fallback = "Sweet Pepper (Polytunnel)"
+        else:
+            _aq_crop_fallback = "Sweet Pepper (GH Substrate)"
+
     st.session_state["aq_country"]            = _pf.get("country", "Germany")
     # Restore fish species if saved on the farm record
     if _pf.get("fish_species") and _pf["fish_species"] in list(FISH_SPECIES.keys()):
