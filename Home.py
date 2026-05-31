@@ -402,7 +402,11 @@ def _render_farm_setup():
                 try:
                     _resp = supabase.table("farms").insert(_final).execute()
                     _new_farm = _resp.data[0] if _resp.data else _final
-                    load_farm(_new_farm)
+                    # Supabase insert response omits some columns (e.g. crop_mix_json).
+                    # Merge _final (full payload) with _new_farm (has DB-generated id/timestamps)
+                    # so that _pending_farm_load contains crop_mix_json for the ROI Calculator.
+                    _full_farm = {**_final, **_new_farm}
+                    load_farm(_full_farm)
                     st.session_state["farm_setup_mode"] = False
                     st.session_state["farm_setup_step"] = 1
                     st.session_state["farm_setup_data"] = {}
