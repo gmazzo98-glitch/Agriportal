@@ -36,6 +36,7 @@ GREENHOUSE_CROPS = {
         "wf": 38.0, "tr": 0.75, "price_low": 2.10, "price_base": 2.85, "price_high": 4.20,
         "natural_dli_fraction": 0.70, "structure_type": "venlo"
     },
+    # Aubergine/Eggplant — heated Venlo substrate production (also available as soil crop in POLYTUNNEL_CROPS)
     "Eggplant": {
         "cycle": 330, "days_between": 0, "yield": 35.0, "yield_h2": 0, "yield_h3": 0,
         "dli": 26.0, "ec": 2.5, "water": 1150, "nutrient": 0.14, "seed": 0.40, "substrate": 1.25,
@@ -103,6 +104,111 @@ GREENHOUSE_CROPS = {
         "seed": 65.00, "substrate": 18.00, "wf": 844.4, "tr": 0.90,
         "price_low": 350.0, "price_base": 550.0, "price_high": 850.0,
         "natural_dli_fraction": 0.55, "structure_type": "venlo"
+    },
+    # Source: WUR (Wageningen), Dutch KWIN Greenhouse Horticulture benchmark
+    "Courgette (Greenhouse)": {
+        "cycle": 150, "days_between": 0, "yield": 35.0, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 20.0, "ec": 2.2, "water": 600.0, "nutrient": 0.15, "seed": 0.50, "substrate": 1.10,
+        "wf": 30.0, "tr": 0.85, "price_low": 1.00, "price_base": 1.50, "price_high": 2.50,
+        "natural_dli_fraction": 0.65, "structure_type": "venlo"
+    },
+    # Source: KWIN, WUR (Spain, Morocco, Netherlands benchmarks)
+    "Chilli Pepper (Greenhouse)": {
+        "cycle": 320, "days_between": 0, "yield": 26.0, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 24.0, "ec": 2.5, "water": 800.0, "nutrient": 0.16, "seed": 0.60, "substrate": 1.20,
+        "wf": 28.0, "tr": 0.85, "price_low": 2.50, "price_base": 4.50, "price_high": 7.00,
+        "natural_dli_fraction": 0.68, "structure_type": "venlo"
+    },
+    # Source: KWIN, WUR (Heated venlo substrate)
+    "Aubergine (Venlo)": {
+        "cycle": 330, "days_between": 0, "yield": 55.0, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 22.0, "ec": 2.0, "water": 1000.0, "nutrient": 0.15, "seed": 0.70, "substrate": 1.20,
+        "wf": 25.0, "tr": 0.88, "price_low": 1.20, "price_base": 1.80, "price_high": 2.80,
+        "natural_dli_fraction": 0.65, "structure_type": "venlo"
+    },
+    # Source: AHDB Soft Fruit, Wageningen Blueberry Research
+    "Blueberry (Protected Cultivation)": {
+        "cycle": 365, "days_between": 0, "yield": 9.0, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 15.0, "ec": 1.0, "water": 450.0, "nutrient": 0.12, "seed": 1.50, "substrate": 2.50,
+        "wf": 50.0, "tr": 0.75, "price_low": 5.00, "price_base": 8.00, "price_high": 14.00,
+        "natural_dli_fraction": 0.70, "structure_type": "venlo"
+    },
+    # Source: KWIN, WUR
+    "Cherry Tomato (On-vine Premium)": {
+        "cycle": 330, "days_between": 0, "yield": 32.0, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 28.0, "ec": 2.8, "water": 850.0, "nutrient": 0.16, "seed": 0.80, "substrate": 1.20,
+        "wf": 35.0, "tr": 0.85, "price_low": 3.50, "price_base": 5.50, "price_high": 8.50,
+        "natural_dli_fraction": 0.65, "structure_type": "venlo"
+    },
+    # Source: DLV Plant, Koppert, WUR Cut Flower Research
+    "Cut Rose (Hybrid Tea)": {
+        "cycle": 365, "days_between": 0, "yield": 8.8, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 28.0, "ec": 1.8, "water": 900.0, "nutrient": 0.18, "seed": 2.00, "substrate": 1.80,
+        "wf": 45.0, "tr": 0.80, "price_low": 8.00, "price_base": 12.00, "price_high": 18.00,
+        "natural_dli_fraction": 0.65, "structure_type": "venlo"
+    },
+    # Source: DLV Plant, Dutch auction price data
+    "Chrysanthemum (Pot/Cut)": {
+        "cycle": 90, "days_between": 14, "yield": 5.6, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 20.0, "ec": 1.6, "water": 200.0, "nutrient": 0.12, "seed": 0.80, "substrate": 0.60,
+        "wf": 35.0, "tr": 0.85, "price_low": 3.00, "price_base": 4.50, "price_high": 6.50,
+        "natural_dli_fraction": 0.60, "structure_type": "venlo"
+    },
+    # Source: WUR, Dutch Flower Auctions (Royal FloraHolland price data)
+    "Gerbera": {
+        "cycle": 365, "days_between": 0, "yield": 7.5, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 22.0, "ec": 1.5, "water": 600.0, "nutrient": 0.14, "seed": 1.20, "substrate": 1.50,
+        "wf": 40.0, "tr": 0.82, "price_low": 6.00, "price_base": 9.00, "price_high": 14.00,
+        "natural_dli_fraction": 0.62, "structure_type": "venlo"
+    },
+    # Source: Dutch herb grower benchmarks
+    "Dill": {
+        "cycle": 35, "days_between": 0, "yield": 1.8, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 15.0, "ec": 1.6, "water": 35.0, "nutrient": 0.10, "seed": 0.10, "substrate": 0.40,
+        "wf": 20.0, "tr": 0.90, "price_low": 6.00, "price_base": 9.00, "price_high": 13.00,
+        "natural_dli_fraction": 0.60, "structure_type": "multi-span"
+    },
+    # Source: KWIN, AHDB Horticulture
+    "Parsley (Greenhouse)": {
+        "cycle": 60, "days_between": 14, "yield": 2.5, "yield_h2": 0.8, "yield_h3": 0.6,
+        "dli": 18.0, "ec": 1.8, "water": 60.0, "nutrient": 0.12, "seed": 0.12, "substrate": 0.50,
+        "wf": 22.0, "tr": 0.92, "price_low": 5.50, "price_base": 8.50, "price_high": 12.00,
+        "natural_dli_fraction": 0.60, "structure_type": "multi-span"
+    },
+    # Source: Dutch herb benchmarks, AHDB
+    "Coriander (Greenhouse)": {
+        "cycle": 35, "days_between": 0, "yield": 1.5, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 14.0, "ec": 1.5, "water": 30.0, "nutrient": 0.10, "seed": 0.12, "substrate": 0.40,
+        "wf": 20.0, "tr": 0.90, "price_low": 7.00, "price_base": 10.00, "price_high": 15.00,
+        "natural_dli_fraction": 0.58, "structure_type": "multi-span"
+    },
+    # Source: Cornell CEA, Rakocy aquaponics nutrient management papers
+    "Swiss Chard (GH Hydroponic)": {
+        "cycle": 40, "days_between": 10, "yield": 3.5, "yield_h2": 0.7, "yield_h3": 0.5,
+        "dli": 17.0, "ec": 1.8, "water": 45.0, "nutrient": 0.12, "seed": 0.15, "substrate": 0.50,
+        "wf": 18.0, "tr": 0.90, "price_low": 3.50, "price_base": 5.00, "price_high": 7.50,
+        "natural_dli_fraction": 0.60, "structure_type": "multi-span"
+    },
+    # Source: Rakocy 2006 UVI system papers, FAO Aquaponics Food and Agriculture
+    "Watercress (GH Hydroponic)": {
+        "cycle": 30, "days_between": 0, "yield": 2.0, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 14.0, "ec": 1.2, "water": 80.0, "nutrient": 0.10, "seed": 0.10, "substrate": 0.30,
+        "wf": 40.0, "tr": 0.85, "price_low": 8.00, "price_base": 12.00, "price_high": 18.00,
+        "natural_dli_fraction": 0.58, "structure_type": "multi-span"
+    },
+    # Source: Cornell CEA Kale trials, WUR
+    "Kale (GH Hydroponic)": {
+        "cycle": 35, "days_between": 0, "yield": 1.8, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 16.0, "ec": 1.8, "water": 40.0, "nutrient": 0.12, "seed": 0.15, "substrate": 0.45,
+        "wf": 20.0, "tr": 0.90, "price_low": 4.50, "price_base": 7.00, "price_high": 11.00,
+        "natural_dli_fraction": 0.60, "structure_type": "multi-span"
+    },
+    # Source: Cornell CEA, WUR
+    "Pak Choi (GH Substrate)": {
+        "cycle": 35, "days_between": 0, "yield": 3.0, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 18.0, "ec": 1.8, "water": 45.0, "nutrient": 0.12, "seed": 0.18, "substrate": 0.50,
+        "wf": 18.0, "tr": 0.90, "price_low": 3.00, "price_base": 4.50, "price_high": 7.00,
+        "natural_dli_fraction": 0.60, "structure_type": "venlo"
     },
 }
 
@@ -212,6 +318,83 @@ POLYTUNNEL_CROPS = {
         "dli": 4.0, "ec": 0.0, "water": 45.0, "nutrient": 0.0,
         "seed": 35.00, "substrate": 22.00, "wf": 128.5, "tr": 0.40,
         "price_low": 4000.0, "price_base": 7000.0, "price_high": 12000.0,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: AHDB Horticulture, Brassica Grower Market Research, NIAB Brassica trials
+    "Broccoli (Polytunnel)": {
+        "cycle": 90, "days_between": 0, "yield": 2.8, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 15.0, "ec": 0.0, "water": 120.0, "nutrient": 0.25, "seed": 0.30, "substrate": 0.15,
+        "wf": 42.0, "tr": 0.85, "price_low": 1.50, "price_base": 2.00, "price_high": 3.00,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: AHDB, NIAB
+    "Cauliflower (Polytunnel)": {
+        "cycle": 100, "days_between": 0, "yield": 3.2, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 15.0, "ec": 0.0, "water": 140.0, "nutrient": 0.28, "seed": 0.35, "substrate": 0.15,
+        "wf": 44.0, "tr": 0.85, "price_low": 1.60, "price_base": 2.20, "price_high": 3.20,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: AHDB, Fresh Produce Journal
+    "Kale (Polytunnel)": {
+        "cycle": 120, "days_between": 25, "yield": 1.8, "yield_h2": 0.70, "yield_h3": 0.50,
+        "dli": 14.0, "ec": 0.0, "water": 160.0, "nutrient": 0.20, "seed": 0.25, "substrate": 0.15,
+        "wf": 55.0, "tr": 0.88, "price_low": 2.00, "price_base": 3.50, "price_high": 5.50,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: AHDB Blueberry Production Guide, USDA ERS Blueberry, Spanish MAPA stats
+    "Blueberry (Polytunnel Soil)": {
+        "cycle": 365, "days_between": 0, "yield": 3.0, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 18.0, "ec": 0.0, "water": 350.0, "nutrient": 0.40, "seed": 3.50, "substrate": 0.55,
+        "wf": 115.0, "tr": 0.75, "price_low": 4.50, "price_base": 7.00, "price_high": 11.00,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: AHDB Currant Guide, JKI Germany
+    "Blackcurrant (Polytunnel)": {
+        "cycle": 365, "days_between": 0, "yield": 2.0, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 16.0, "ec": 0.0, "water": 300.0, "nutrient": 0.35, "seed": 2.50, "substrate": 0.40,
+        "wf": 150.0, "tr": 0.75, "price_low": 3.00, "price_base": 4.50, "price_high": 7.00,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: AHDB, Dutch herb grower associations
+    "Parsley (Polytunnel)": {
+        "cycle": 120, "days_between": 21, "yield": 1.5, "yield_h2": 0.80, "yield_h3": 0.60,
+        "dli": 15.0, "ec": 0.0, "water": 200.0, "nutrient": 0.25, "seed": 0.15, "substrate": 0.20,
+        "wf": 60.0, "tr": 0.88, "price_low": 3.50, "price_base": 5.50, "price_high": 8.50,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: AHDB, KWIN
+    "Chives (Polytunnel)": {
+        "cycle": 150, "days_between": 20, "yield": 1.2, "yield_h2": 0.90, "yield_h3": 0.85,
+        "dli": 14.0, "ec": 0.0, "water": 220.0, "nutrient": 0.28, "seed": 0.40, "substrate": 0.20,
+        "wf": 55.0, "tr": 0.85, "price_low": 4.50, "price_base": 7.00, "price_high": 11.00,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: MAPA Spain, AHDB
+    "Chilli Pepper (Unheated)": {
+        "cycle": 180, "days_between": 0, "yield": 8.5, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 22.0, "ec": 0.0, "water": 350.0, "nutrient": 0.45, "seed": 0.60, "substrate": 0.35,
+        "wf": 40.0, "tr": 0.82, "price_low": 1.80, "price_base": 2.80, "price_high": 4.50,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: AHDB Root Vegetable trials, Fresh Produce Journal
+    "Beetroot (Baby Polytunnel)": {
+        "cycle": 60, "days_between": 0, "yield": 2.5, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 16.0, "ec": 0.0, "water": 100.0, "nutrient": 0.20, "seed": 0.45, "substrate": 0.15,
+        "wf": 40.0, "tr": 0.80, "price_low": 2.50, "price_base": 4.00, "price_high": 6.50,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: AHDB, CTIFL France
+    "Butternut Squash": {
+        "cycle": 120, "days_between": 0, "yield": 6.5, "yield_h2": 0.0, "yield_h3": 0.0,
+        "dli": 20.0, "ec": 0.0, "water": 280.0, "nutrient": 0.35, "seed": 0.35, "substrate": 0.25,
+        "wf": 45.0, "tr": 0.80, "price_low": 1.20, "price_base": 1.80, "price_high": 2.80,
+        "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
+    },
+    # Source: British Leafy Salad Association, AHDB Salad Crops
+    "Baby Leaf Salad Mix": {
+        "cycle": 40, "days_between": 15, "yield": 1.2, "yield_h2": 0.70, "yield_h3": 0.50,
+        "dli": 12.0, "ec": 0.0, "water": 80.0, "nutrient": 0.15, "seed": 0.30, "substrate": 0.15,
+        "wf": 45.0, "tr": 0.90, "price_low": 3.50, "price_base": 5.50, "price_high": 9.00,
         "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
     },
 }
