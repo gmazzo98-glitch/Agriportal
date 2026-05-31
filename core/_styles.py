@@ -256,6 +256,14 @@ def _css() -> str:
         border-color: var(--sage); box-shadow: 0 0 0 2px var(--sage-tint);
       }}
 
+      /* ── Fix unreadable selectbox dropdown menus (white on white) ── */
+      div[data-baseweb="popover"] ul {{
+        background-color: var(--surface) !important;
+      }}
+      div[data-baseweb="popover"] li {{
+        color: var(--ink) !important;
+      }}
+
       /* Slider — sage track + thumb */
       .stSlider [data-baseweb="slider"] [role="slider"] {{
         background: var(--sage); border: 2px solid var(--sage);
@@ -897,6 +905,14 @@ def inject_home_styles() -> None:
             box-shadow: 0 0 0 2px var(--accent-soft) !important;
           }
           div[data-testid="stTextInput"] label { display: none !important; }
+
+          /* Fix unreadable selectbox dropdown menus */
+          div[data-baseweb="popover"] ul {
+            background-color: #ffffff !important;
+          }
+          div[data-baseweb="popover"] li {
+            color: #1c1f1a !important;
+          }
 
           div[data-testid="stHorizontalBlock"] { align-items: stretch !important; }
 
