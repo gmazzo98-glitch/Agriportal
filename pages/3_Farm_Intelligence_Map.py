@@ -1041,25 +1041,6 @@ with st.sidebar:
                 help="Draws a circle of this radius around the discovered target."
             )
 
-# ── Suitability pre-computation (must run before map block — no st.* calls allowed inside map) ──
-if st.session_state.get("fim_suitability_active", False):
-    _search_radius_km = st.session_state.get("fim_suit_search_radius", 50)
-    _suit_results = {}
-    for _i in range(3):
-        _target = st.session_state.get(f"fim_suit_target_{_i}", "None / Skip")
-        if _target and _target != "None / Skip":
-            with st.spinner(f"Locating nearest: {_target}…"): # Remove emoji from spinner
-                _suit_results[_i] = find_triangulation_target(
-                    _target, lat, lng, _search_radius_km,
-                    st.session_state.get("fim_waste_df"),
-                    st.session_state.get("fim_logistics_df"),
-                )
-            if _suit_results[_i] is None:
-                st.toast(f"No {_target} found within {_search_radius_km} km.", icon="⚠️")
-    st.session_state["fim_suitability_results"] = _suit_results
-else:
-    st.session_state["fim_suitability_results"] = {}
-
 # ── Map (always visible) ──────────────────────────────────────────────────────
 
 st.subheader("Intelligence Map") # Remove emoji from subheader
@@ -1186,7 +1167,7 @@ if layer_logistics and logistics_cached is not None and not logistics_cached.emp
             ),
         ).add_to(m)
 
-map_result = st_folium(m, width="100%", height=540, returned_objects=["last_clicked"])
+map_result = st_folium(m, width="100%", height=540, returned_objects=["last_clicked"], key="fim_main_map")
 
 # Capture map click
 if map_result and map_result.get("last_clicked"):
@@ -1217,24 +1198,41 @@ if legend_html:
 
 st.divider()
 
-# ── Search execution (Deferred until after map rendering to prevent map disappearance) ──
-if search_clicked:
+# ── Deferred Pre-computations & Search Execution ──
+# This block runs AFTER the map has been sent to the browser, ensuring the map remains visible
+if search_clicked or st.session_state.get("fim_suitability_active", False):
     # Clear old caches instantly so ghost data doesn't persist if a massive query fails
-    st.session_state["fim_waste_df"] = None
-    st.session_state["fim_logistics_df"] = None
+    if search_clicked:
+        st.session_state["fim_waste_df"] = None
+        st.session_state["fim_logistics_df"] = None
+
+    # ── Suitability Finder Logic ──
+    if st.session_state.get("fim_suitability_active", False):
+        _search_radius_km = st.session_state.get("fim_suit_search_radius", 50)
+        _suit_results = {}
+        for _i in range(3):
+            _target = st.session_state.get(f"fim_suit_target_{_i}", "None / Skip")
+            if _target and _target != "None / Skip":
+                with st.spinner(f"Locating nearest: {_target}…"):
+                    _suit_results[_i] = find_triangulation_target(
+                        _target, lat, lng, _search_radius_km,
+                        st.session_state.get("fim_waste_df"),
+                        st.session_state.get("fim_logistics_df"),
+                    )
+        st.session_state["fim_suitability_results"] = _suit_results
 
     with st.sidebar:
         # Warn user about expected query time at large radii
-        if radius_km > 40:
+        if search_clicked and radius_km > 40:
             st.warning(
                 f"⏳ Large search radius ({radius_km} km) — this may take 60–90 seconds. "
                 "If the search times out, reduce the radius and try again.",
                 icon="⚠️",
             )
-        elif radius_km > 20:
+        elif search_clicked and radius_km > 20:
             st.info(f"⏳ Querying {radius_km} km radius — expect 20–40 seconds.")
         
-        if layer_waste:
+        if search_clicked and layer_waste:
             with st.spinner("♻️ Querying waste sources (may take up to 90s for large radius)…"):
                 try:
                     elements = fetch_waste_layer(lat, lng, radius_m)
@@ -1243,7 +1241,7 @@ if search_clicked:
                 except Exception as e:
                     st.error(f"Waste layer error: {e}")
 
-        if layer_logistics:
+        if search_clicked and layer_logistics:
             with st.spinner("🚛 Querying logistics infrastructure…"):
                 try:
                     elements = fetch_logistics_layer(lat, lng, radius_m)
@@ -1253,7 +1251,7 @@ if search_clicked:
                     st.error(f"Logistics layer error: {e}")
 
         # Auto-save to Supabase if a farm is active — no user action required
-        _af = st.session_state.get("active_farm")
+        _af = st.session_state.get("active_farm") if search_clicked else None
         if _af:
             _autosave_fim_to_supabase(_af, st.session_state.get("fim_waste_df"), st.session_state.get("fim_logistics_df"))
 
