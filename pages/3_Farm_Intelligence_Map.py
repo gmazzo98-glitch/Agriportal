@@ -62,9 +62,8 @@ def _ors_road_distances(src_lat: float, src_lon: float, targets: list[dict]) -> 
     locations = [[src_lon, src_lat]] + [[t["lon"], t["lat"]] for t in targets]
     payload = {
         "locations": locations,
-        "sources": [0],
-        "metrics": ["distance"],
-        "units": "km",
+        "sources":   [0],
+        "metrics":   ["duration"],   # free tier only supports duration (seconds)
     }
     try:
         resp = requests.post(
@@ -79,9 +78,11 @@ def _ors_road_distances(src_lat: float, src_lon: float, targets: list[dict]) -> 
         )
         resp.raise_for_status()
         data = resp.json()
-        row = data["distances"][0]          # source=0 → one row
+        row = data["durations"][0]          # source=0 → one row, values in seconds
+        # Convert seconds → km using 60 km/h average road speed (free tier has no distance metric)
+        AVG_SPEED_KMH = 60.0
         st.session_state.pop("_ors_last_error", None)  # clear any previous error on success
-        return [round(d, 2) if d is not None else None for d in row[1:]]
+        return [round(s / 3600 * AVG_SPEED_KMH, 2) if s is not None else None for s in row[1:]]
     except Exception as e:
         try:
             st.session_state["_ors_last_error"] = str(e)
@@ -126,7 +127,7 @@ def add_osrm_distances(df: pd.DataFrame, src_lat: float, src_lon: float) -> pd.D
     for i, idx in enumerate(subset.index):
         if road_km[i] is not None:
             df.at[idx, "Distance (km)"] = road_km[i]
-            df.at[idx, "Routing"] = "ORS (Road)"
+            df.at[idx, "Routing"] = "ORS (Drive time)"
 
     df = df.sort_values("Distance (km)").reset_index(drop=True)
     return df
