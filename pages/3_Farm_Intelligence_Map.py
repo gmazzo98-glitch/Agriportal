@@ -151,6 +151,43 @@ def reverse_geocode_country(lat: float, lng: float) -> tuple[str | None, str | N
         return None, None
 
 
+def _autosave_fim_to_supabase(
+    active_farm: dict,
+    waste_df,
+    logistics_df,
+) -> None:
+    """
+    Automatically saves FIM results to farms.metadata in Supabase.
+    Called after every successful search — no user action required.
+    Silently swallows errors so a save failure never blocks the UI.
+    """
+    if not active_farm or not active_farm.get("id"):
+        return
+    if waste_df is None and logistics_df is None:
+        return
+    try:
+        sb        = get_supabase()
+        resp      = sb.table("farms").select("metadata").eq("id", active_farm["id"]).execute()
+        _raw      = resp.data[0].get("metadata") if resp.data else None
+        if isinstance(_raw, str):
+            import json as _j
+            try:    _raw = _j.loads(_raw)
+            except: _raw = {}
+        meta = _raw if isinstance(_raw, dict) else {}
+        if waste_df is not None and not waste_df.empty:
+            meta["fim_waste_data"]     = waste_df.to_dict(orient="records")
+        if logistics_df is not None and not logistics_df.empty:
+            meta["fim_logistics_data"] = logistics_df.to_dict(orient="records")
+        sb.table("farms").update({"metadata": meta}).eq("id", active_farm["id"]).execute()
+        # Keep local session state in sync
+        if st.session_state.get("active_farm"):
+            if not st.session_state["active_farm"].get("metadata"):
+                st.session_state["active_farm"]["metadata"] = {}
+            st.session_state["active_farm"]["metadata"].update(meta)
+    except Exception:
+        pass  # Never surface auto-save errors to the user
+
+
 def run_overpass_query(query: str) -> list[dict]:
     """
     Queries Overpass API with fallback mirrors and smart retry logic.
@@ -1004,6 +1041,15 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"Logistics layer error: {e}")
 
+        # Auto-save to Supabase if a farm is active — no user action required
+        _af = st.session_state.get("active_farm")
+        if _af:
+            _autosave_fim_to_supabase(
+                _af,
+                st.session_state.get("fim_waste_df"),
+                st.session_state.get("fim_logistics_df"),
+            )
+
         st.rerun()
 
     with st.expander("Location Suitability Finder", expanded=False): # Remove emoji from expander title
@@ -1219,69 +1265,47 @@ if waste_cached is None and logistics_cached is None:
     st.info("Toggle the layers you want in the sidebar, set your radius, and click **Search**.") # Remove emoji from info message
     st.stop()
 
-# ── Save Results to Farm Profile ──────────────────────────────────────────────
+# ── Farm Profile sync status ──────────────────────────────────────────────────
 active_farm = st.session_state.get("active_farm")
 if active_farm and (waste_cached is not None or logistics_cached is not None):
     _meta_check   = active_farm.get("metadata") or {}
     _has_saved_w  = "fim_waste_data"     in _meta_check and bool(_meta_check["fim_waste_data"])
-    _has_saved_l  = "fim_logistics_data" in _meta_check and bool(_meta_check["fim_logistics_data"]) # Remove emoji from markdown
+    _has_saved_l  = "fim_logistics_data" in _meta_check and bool(_meta_check["fim_logistics_data"])
     _has_any_saved = _has_saved_w or _has_saved_l
-
-    st.markdown(f"**💾 Intelligence Data — Farm Profile: `{active_farm['name']}`**")
 
     if _has_any_saved:
         _saved_parts = []
         if _has_saved_w: _saved_parts.append(f"{len(_meta_check['fim_waste_data'])} waste facilities")
         if _has_saved_l: _saved_parts.append(f"{len(_meta_check['fim_logistics_data'])} logistics points")
-        st.success(f"✅ Saved data loaded from profile: {' · '.join(_saved_parts)}. Re-run search and save again to refresh.")
+        st.caption(
+            f"💾 Auto-saved to **{active_farm['name']}** · {' · '.join(_saved_parts)} · "
+            f"Reloads automatically on next visit."
+        )
     else:
-        st.caption("Save current results to the farm profile — they will reload instantly next time without re-running the search.")
+        st.caption(f"💾 Results will be auto-saved to **{active_farm['name']}** on next search.")
 
-    _sc1, _sc2 = st.columns([2, 1]) # Keep emoji in button
-    with _sc1:
-        if st.button("💾 Save / Overwrite to Database", type="primary", use_container_width=True):
-            with st.spinner("Saving to Supabase..."):
+    # Keep clear option — useful when relocating a farm to a new area
+    if _has_any_saved:
+        if st.button("🗑️ Clear Saved Map Data", use_container_width=False):
+            with st.spinner("Clearing..."):
                 try:
                     sb = get_supabase()
-                    farm_resp    = sb.table("farms").select("metadata").eq("id", active_farm["id"]).execute()
-                    _raw_meta    = farm_resp.data[0].get("metadata") if farm_resp.data else None
+                    farm_resp     = sb.table("farms").select("metadata").eq("id", active_farm["id"]).execute()
+                    _raw_meta     = farm_resp.data[0].get("metadata") if farm_resp.data else None
                     if isinstance(_raw_meta, str):
                         import json as _json
                         _raw_meta = _json.loads(_raw_meta)
                     existing_meta = _raw_meta if isinstance(_raw_meta, dict) else {}
-                    if waste_cached is not None:
-                        existing_meta["fim_waste_data"]     = waste_cached.to_dict(orient="records")
-                    if logistics_cached is not None:
-                        existing_meta["fim_logistics_data"] = logistics_cached.to_dict(orient="records")
+                    existing_meta.pop("fim_waste_data",     None)
+                    existing_meta.pop("fim_logistics_data", None)
                     sb.table("farms").update({"metadata": existing_meta}).eq("id", active_farm["id"]).execute()
-                    if "metadata" not in st.session_state["active_farm"] or st.session_state["active_farm"]["metadata"] is None:
-                        st.session_state["active_farm"]["metadata"] = {}
-                    st.session_state["active_farm"]["metadata"].update(existing_meta)
-                    st.success("✅ Intelligence data saved to farm profile.")
+                    if st.session_state["active_farm"].get("metadata"):
+                        st.session_state["active_farm"]["metadata"].pop("fim_waste_data",     None)
+                        st.session_state["active_farm"]["metadata"].pop("fim_logistics_data", None)
+                    st.success("Saved map data cleared.")
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"Failed to save data: {e}")
-
-    with _sc2:
-        if _has_any_saved:
-            if st.button("🗑️ Clear Saved Data", use_container_width=True):
-                with st.spinner("Clearing..."):
-                    try:
-                        sb = get_supabase()
-                        farm_resp     = sb.table("farms").select("metadata").eq("id", active_farm["id"]).execute()
-                        _raw_meta     = farm_resp.data[0].get("metadata") if farm_resp.data else None
-                        if isinstance(_raw_meta, str):
-                            import json as _json
-                            _raw_meta = _json.loads(_raw_meta)
-                        existing_meta = _raw_meta if isinstance(_raw_meta, dict) else {}
-                        existing_meta.pop("fim_waste_data",     None)
-                        existing_meta.pop("fim_logistics_data", None)
-                        sb.table("farms").update({"metadata": existing_meta}).eq("id", active_farm["id"]).execute()
-                        if st.session_state["active_farm"].get("metadata"):
-                            st.session_state["active_farm"]["metadata"].pop("fim_waste_data",     None)
-                            st.session_state["active_farm"]["metadata"].pop("fim_logistics_data", None)
-                        st.success("Saved intelligence data cleared from profile.")
-                    except Exception as e:
-                        st.error(f"Failed to clear data: {e}")
+                    st.error(f"Failed to clear data: {e}")
 
     st.divider()
 
