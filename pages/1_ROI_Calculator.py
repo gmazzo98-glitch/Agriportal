@@ -88,7 +88,15 @@ def _render_farm_selector_sidebar():
         if _sel != "— select —":
             _farm = next((f for f in _farms_list if f["name"] == _sel), None)
             if _farm and (not _active or _active.get("name") != _sel):
-                if st.button("⬇️ Load", use_container_width=True, key="global_farm_load_btn"): # Keep emoji in button
+                if st.button("⬇️ Load", use_container_width=True, key="global_farm_load_btn"):
+                    # Clear stale multi-crop row keys so _pending_farm_load handler writes cleanly
+                    for _sli in range(6):
+                        for _spfx in ("roi", "gh", "aq"):
+                            st.session_state.pop(f"{_spfx}_mix_crop_{_sli}", None)
+                            st.session_state.pop(f"{_spfx}_mix_pct_{_sli}", None)
+                    for _smk in ("roi_multi_crop", "gh_multi_crop", "aq_multi_crop",
+                                 "roi_crop_mix", "gh_crop_mix", "aq_crop_mix"):
+                        st.session_state.pop(_smk, None)
                     st.session_state["active_farm"]        = _farm
                     st.session_state["_pending_farm_load"] = _farm
                     st.session_state["gh_country"]         = _farm.get("country", "Germany")
@@ -1556,6 +1564,10 @@ if "_pending_farm_load" in st.session_state:
     # ── AQ keys ───────────────────────────────────────────────────────────────
     _aq_crop_fallback = _pf.get("crop", "Lettuce (Romaine)")
     st.session_state["aq_country"]            = _pf.get("country", "Germany")
+    # Restore fish species if saved on the farm record
+    if _pf.get("fish_species") and _pf["fish_species"] in list(FISH_SPECIES.keys()):
+        st.session_state["aq_species"] = _pf["fish_species"]
+
     st.session_state["aq_plant_crop"]         = _aq_crop_fallback
     st.session_state["aq_plant_crop_source"]  = (
         "Polytunnel" if (_pf.get("crop_source") or "greenhouse").lower() == "polytunnel"

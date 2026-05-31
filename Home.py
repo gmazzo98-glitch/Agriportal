@@ -11,7 +11,7 @@ from core.farm_context import (
     MODALITY_LABELS, MODALITY_RADIO, MODALITY_COLOURS,
 )
 from core.data_tables import COUNTRIES, CROPS
-from core.greenhouse_data_tables import GREENHOUSE_CROPS, POLYTUNNEL_CROPS
+from core.greenhouse_data_tables import GREENHOUSE_CROPS, POLYTUNNEL_CROPS, FISH_SPECIES
 
 st.set_page_config(
     page_title="Agricultural Intelligence Portal",
@@ -285,13 +285,30 @@ def _render_farm_setup():
     elif _step == 3:
         st.markdown("### Crop Selection")
         _mod = _data.get("modality", "vertical_farm")
-        _crop_source = _data.get("crop_source", "Greenhouse")
+
+        # ── Determine correct crop dict for this modality ─────────────────────
         if _mod == "vertical_farm":
-            _crop_dict = CROPS
-        elif _mod == "polytunnel" or _crop_source == "Polytunnel":
-            _crop_dict = POLYTUNNEL_CROPS
+            _crop_source = "vertical_farm"
+            _crop_dict   = CROPS
+        elif _mod == "polytunnel":
+            _crop_source = "Polytunnel"
+            _crop_dict   = POLYTUNNEL_CROPS
+        elif _mod in ("aquaponics_decoupled", "aquaponics_coupled"):
+            # Aquaponics plant zone can be greenhouse OR polytunnel — let user choose
+            _aq_plant_src = st.radio(
+                "Plant zone type",
+                options=["Greenhouse", "Polytunnel"],
+                index=0 if _data.get("crop_source", "Greenhouse") != "Polytunnel" else 1,
+                horizontal=True,
+                key="fs_aq_plant_src",
+            )
+            _crop_source = _aq_plant_src
+            _crop_dict   = POLYTUNNEL_CROPS if _aq_plant_src == "Polytunnel" else GREENHOUSE_CROPS
         else:
-            _crop_dict = GREENHOUSE_CROPS
+            # greenhouse
+            _crop_source = "Greenhouse"
+            _crop_dict   = GREENHOUSE_CROPS
+
         _crop_list = sorted(_crop_dict.keys())
         _default_crop = _data.get("crop", _crop_list[0])
         if _default_crop not in _crop_list:
@@ -326,22 +343,56 @@ def _render_farm_setup():
             if _total != 100:
                 st.warning(f"Allocation sums to {_total}% — must be exactly 100%.")
 
+        # ── Aquaponics: fish species selector ─────────────────────────────────
+        _selected_fish_species = _data.get("fish_species", "Tilapia (Nile)")
+        if _mod in ("aquaponics_decoupled", "aquaponics_coupled"):
+            st.divider()
+            st.markdown("**Fish Species**")
+            _fish_list = list(FISH_SPECIES.keys())
+            if _selected_fish_species not in _fish_list:
+                _selected_fish_species = _fish_list[0]
+            _selected_fish_species = st.selectbox(
+                "Primary fish species",
+                _fish_list,
+                index=_fish_list.index(_selected_fish_species),
+                key="fs_fish_species",
+            )
+            if _selected_fish_species == "Atlantic Salmon" and _mod == "aquaponics_coupled":
+                st.error("⚠️ Salmon is incompatible with coupled aquaponics (cold water ≤14°C conflicts with shared nutrient loop).")
+
         _s3c1, _s3c2, _s3c3 = st.columns([1, 1, 2])
         with _s3c1:
             if st.button("← Back", use_container_width=True, key="fs_back3"):
+                # Clear stale crop widget keys so they don't corrupt the new modality's crop list
+                for _si in range(6):
+                    st.session_state.pop(f"fs_crop_{_si}", None)
+                    st.session_state.pop(f"fs_pct_{_si}", None)
+                st.session_state.pop("fs_crop_single", None)
+                st.session_state.pop("fs_multi", None)
+                st.session_state.pop("fs_n_crops", None)
+                st.session_state.pop("fs_aq_plant_src", None)
+                st.session_state.pop("fs_fish_species", None)
+                # Clear saved crop mix from data so it doesn't pre-populate with wrong modality crops
+                st.session_state["farm_setup_data"].pop("crop_mix", None)
+                st.session_state["farm_setup_data"].pop("crop_mix_json", None)
+                st.session_state["farm_setup_data"].pop("crop", None)
                 st.session_state["farm_setup_step"] = 2
                 st.rerun()
         with _s3c2:
             _mix_ok = (not _multi) or (sum(r["pct"] for r in _crop_mix) == 100)
+            _salmon_coupled_block = (_selected_fish_species == "Atlantic Salmon" and _mod == "aquaponics_coupled")
             if st.button("Next →", type="primary", use_container_width=True,
-                          key="fs_next3", disabled=not _mix_ok):
+                          key="fs_next3", disabled=(not _mix_ok or _salmon_coupled_block)):
                 st.session_state["farm_setup_data"].update({
-                    "crop": _crop_mix[0]["crop"],
-                    "multi_crop": _multi,
-                    "crop_mix_json": json.dumps(_crop_mix),
+                    "crop":             _crop_mix[0]["crop"],
+                    "multi_crop":       _multi,
+                    "crop_mix_json":    json.dumps(_crop_mix),
+                    "crop_source":      _crop_source,
+                    "fish_species":     _selected_fish_species if _mod.startswith("aquaponics") else None,
                 })
                 st.session_state["farm_setup_step"] = 4
                 st.rerun()
+
 
     elif _step == 4:
         st.markdown("### Financial Structure")
@@ -394,19 +445,18 @@ def _render_farm_setup():
                 }) if _final["modality"].startswith("aquaponics") else {}
                 
                 # Remove auxiliary keys not present in the database schema
-                for _k in ["multi_crop", "crop_mix", "tank_volume_m3"]:
+                for _k in ["multi_crop", "crop_mix", "tank_volume_m3", "fish_species_temp"]:
                     _final.pop(_k, None)
+                # fish_species is a valid DB column for aquaponics farms — keep it if present
+                if not _final.get("modality", "").startswith("aquaponics"):
+                    _final.pop("fish_species", None)
 
                 _final["owner_id"] = current_user()
 
                 try:
                     _resp = supabase.table("farms").insert(_final).execute()
                     _new_farm = _resp.data[0] if _resp.data else _final
-                    # Supabase insert response omits some columns (e.g. crop_mix_json).
-                    # Merge _final (full payload) with _new_farm (has DB-generated id/timestamps)
-                    # so that _pending_farm_load contains crop_mix_json for the ROI Calculator.
-                    _full_farm = {**_final, **_new_farm}
-                    load_farm(_full_farm)
+                    load_farm(_new_farm)
                     st.session_state["farm_setup_mode"] = False
                     st.session_state["farm_setup_step"] = 1
                     st.session_state["farm_setup_data"] = {}
