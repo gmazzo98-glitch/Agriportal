@@ -635,25 +635,29 @@ li[role="option"][aria-selected="true"] {
    var(--sage) is a deep green in light mode and would be low-contrast on the
    dark sidebar; pin marks to the bright dark-mode green + a light ring. */
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] > div:first-of-type {
-  border-color: #5a6258 !important;
+  border-color: #7a8070 !important;
 }
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:has(input:checked) > div:first-of-type {
   border-color: #62b076 !important;
+  background: #ffffff !important;
 }
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:has(input:checked) > div:first-of-type > div {
   background: #62b076 !important;
 }
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] p { color: #d6d2c8 !important; }
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:has(input:checked) p {
-  color: #8fd6a0 !important; font-weight: 600 !important;
+  color: #ffffff !important; font-weight: 600 !important;
 }
 [data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"] > span:first-of-type,
 [data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"] > div:first-of-type {
-  background: #252a25 !important; border-color: #5a6258 !important;
+  background: #252a25 !important; border-color: #7a8070 !important;
 }
 [data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"]:has(input:checked) > span:first-of-type,
 [data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"]:has(input:checked) > div:first-of-type {
-  background: #62b076 !important; border-color: #62b076 !important;
+  background: #ffffff !important; border-color: #62b076 !important;
+}
+[data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"]:has(input:checked) svg {
+  fill: #62b076 !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
