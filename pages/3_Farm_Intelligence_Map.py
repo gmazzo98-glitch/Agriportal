@@ -66,15 +66,16 @@ def _ors_road_distances(src_lat: float, src_lon: float, targets: list[dict]) -> 
         "metrics": ["distance"],
         "units": "km",
     }
-    # ORS v2 accepts the key as a query param (most reliable) or as Authorization header.
-    # Authorization-header-only sends result in 403 for many free-tier keys.
-    url = f"https://api.openrouteservice.org/v2/matrix/driving-car?api_key={api_key}"
     try:
         resp = requests.post(
-            url,
+            "https://api.openrouteservice.org/v2/matrix/driving-car",
             json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=30,
+            headers={
+                "Accept":        "application/json, application/geo+json",
+                "Authorization": api_key,
+                "Content-Type":  "application/json; charset=utf-8",
+            },
+            timeout=15,
         )
         resp.raise_for_status()
         data = resp.json()
