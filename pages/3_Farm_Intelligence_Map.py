@@ -74,15 +74,16 @@ def _ors_road_distances(src_lat: float, src_lon: float, targets: list[dict]) -> 
                 "Authorization": api_key,
                 "Content-Type": "application/json",
             },
-            timeout=15,
+            timeout=30,
         )
         resp.raise_for_status()
         data = resp.json()
         row = data["distances"][0]          # source=0 → one row
+        st.session_state.pop("_ors_last_error", None)  # clear any previous error on success
         return [round(d, 2) if d is not None else None for d in row[1:]]
     except Exception as e:
         try:
-            st.sidebar.warning(f"ORS road distances unavailable: {e}. Showing straight-line distances.")
+            st.session_state["_ors_last_error"] = str(e)
         except Exception:
             pass
         return [None] * len(targets)
@@ -1011,7 +1012,21 @@ with st.sidebar:
 
     st.divider()
     search_clicked = st.button("🔍 Search All Active Layers", use_container_width=True)
-    st.caption("**Data:** OpenStreetMap contributors via Overpass API.") # Keep emoji in button
+    st.caption("**Data:** OpenStreetMap contributors via Overpass API.")
+
+    # ORS routing status
+    try:
+        _ors_key_present = bool(st.secrets.get("ORS_API_KEY", ""))
+    except Exception:
+        _ors_key_present = False
+    if _ors_key_present:
+        _ors_err = st.session_state.get("_ors_last_error")
+        if _ors_err:
+            st.caption(f"🔴 ORS road routing: key found but last call failed — {_ors_err}")
+        else:
+            st.caption("🟢 ORS road routing active (priority infrastructure uses real road distances)")
+    else:
+        st.caption("⚪ ORS road routing inactive — add `ORS_API_KEY` to secrets for real road distances")
 
     with st.expander("Location Suitability Finder", expanded=False): # Remove emoji from expander title
         st.caption(
@@ -1138,39 +1153,48 @@ if _active_farm_map and _active_farm_map.get("lat") and _active_farm_map.get("lo
 waste_cached = st.session_state.get("fim_waste_df")
 if layer_waste and waste_cached is not None and not waste_cached.empty:
     for _, row in waste_cached.iterrows():
-        hex_color = INDUSTRY_COLORS.get(row["Predicted Industry"], "#505050") # Keep emoji in tooltip and popup
-        folium.CircleMarker(
-            location=[row["lat"], row["lon"]],
-            radius=7,
-            color=hex_color, fill=True, fill_color=hex_color, fill_opacity=0.85,
-            tooltip=f"♻️ {row['Company Name']} | {row['Predicted Industry']} | {row['Distance (km)']} km",
-            popup=folium.Popup(
-                f"<b>♻️ {row['Company Name']}</b><br>"
-                f"Industry: {row['Predicted Industry']}<br>"
-                f"Waste: {row['Potential Fertilizer Waste']}<br>"
-                f"NPK: {row['NPK Label']}<br>"
-                f"Distance: {row['Distance (km)']} km",
-                max_width=300,
-            ),
-        ).add_to(m)
+        try:
+            hex_color = INDUSTRY_COLORS.get(row.get("Predicted Industry", "Unknown / Other"), "#505050")
+            dist_label = f"{row['Distance (km)']} km" if "Distance (km)" in row.index else "—"
+            folium.CircleMarker(
+                location=[row["lat"], row["lon"]],
+                radius=7,
+                color=hex_color, fill=True, fill_color=hex_color, fill_opacity=0.85,
+                tooltip=f"♻️ {row.get('Company Name','?')} | {row.get('Predicted Industry','?')} | {dist_label}",
+                popup=folium.Popup(
+                    f"<b>♻️ {row.get('Company Name','?')}</b><br>"
+                    f"Industry: {row.get('Predicted Industry','?')}<br>"
+                    f"Waste: {row.get('Potential Fertilizer Waste','?')}<br>"
+                    f"NPK: {row.get('NPK Label','?')}<br>"
+                    f"Distance: {dist_label}",
+                    max_width=300,
+                ),
+            ).add_to(m)
+        except Exception:
+            continue
 
 # Plot logistics layer results
 logistics_cached = st.session_state.get("fim_logistics_df")
 if layer_logistics and logistics_cached is not None and not logistics_cached.empty:
     for _, row in logistics_cached.iterrows():
-        folium.CircleMarker( # Keep emoji in tooltip and popup
-            location=[row["lat"], row["lon"]],
-            radius=9,
-            color=row["color"], fill=True, fill_color=row["color"], fill_opacity=0.75,
-            tooltip=f"🚛 {row['Name']} | {row['Type']} | {row['Distance (km)']} km",
-            popup=folium.Popup(
-                f"<b>🚛 {row['Name']}</b><br>"
-                f"Type: {row['Type']}<br>"
-                f"Distance: {row['Distance (km)']} km<br>"
-                f"Address: {row['Address']}",
-                max_width=260,
-            ),
-        ).add_to(m)
+        try:
+            _lcolor    = row.get("color", "#969696")
+            dist_label = f"{row['Distance (km)']} km" if "Distance (km)" in row.index else "—"
+            folium.CircleMarker(
+                location=[row["lat"], row["lon"]],
+                radius=9,
+                color=_lcolor, fill=True, fill_color=_lcolor, fill_opacity=0.75,
+                tooltip=f"🚛 {row.get('Name','?')} | {row.get('Type','?')} | {dist_label}",
+                popup=folium.Popup(
+                    f"<b>🚛 {row.get('Name','?')}</b><br>"
+                    f"Type: {row.get('Type','?')}<br>"
+                    f"Distance: {dist_label}<br>"
+                    f"Address: {row.get('Address','—')}",
+                    max_width=260,
+                ),
+            ).add_to(m)
+        except Exception:
+            continue
 
 map_result = st_folium(m, width="100%", height=540, returned_objects=["last_clicked"], key="fim_main_map")
 
@@ -1204,14 +1228,15 @@ if legend_html:
 st.divider()
 
 # ── Deferred Pre-computations & Search Execution ──
-# This block runs AFTER the map has been sent to the browser, ensuring the map remains visible
-if search_clicked or st.session_state.get("fim_suitability_active", False):
+# This block runs AFTER the map has been sent to the browser, ensuring the map remains visible.
+# NOTE: do NOT add "or suitability_active" here — that would create an infinite rerun loop
+# whenever the suitability checkbox is ticked (block runs → st.rerun() → block runs → …).
+if search_clicked:
     # Clear old caches instantly so ghost data doesn't persist if a massive query fails
-    if search_clicked:
-        st.session_state["fim_waste_df"] = None
-        st.session_state["fim_logistics_df"] = None
+    st.session_state["fim_waste_df"] = None
+    st.session_state["fim_logistics_df"] = None
 
-    # ── Suitability Finder Logic ──
+    # ── Suitability Finder Logic (runs as part of the same Search click) ──
     if st.session_state.get("fim_suitability_active", False):
         _search_radius_km = st.session_state.get("fim_suit_search_radius", 50)
         _suit_results = {}
