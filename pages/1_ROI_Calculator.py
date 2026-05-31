@@ -40,6 +40,43 @@ st.set_page_config(page_title="ROI Calculator", page_icon="📊", layout="wide")
 inject_styles()
 require_login()
 
+# ── Sidebar Dropdown & Expander Readability Fix ───────────────────────────
+st.markdown("""
+<style>
+  /* Selectboxes and Multiselects inside sidebar expanders */
+  /* Since expanders have a light background, these must use the light-theme palette 
+     to avoid dark-on-dark text from inheriting sidebar styles. */
+  [data-testid="stSidebar"] [data-testid="stExpander"] [data-baseweb="select"] > div {
+    background-color: var(--surface) !important;
+    border-color: var(--rule) !important;
+  }
+  [data-testid="stSidebar"] [data-testid="stExpander"] [data-baseweb="select"] * {
+    color: var(--ink) !important;
+    fill: var(--ink) !important;
+  }
+  /* Sidebar selectboxes outside of expanders: ensure borders use style tokens */
+  [data-testid="stSidebar"] [data-baseweb="select"] > div {
+    border-color: var(--rule-soft) !important;
+  }
+
+  /* ── Modality Radio Button Visibility Fix ── */
+  /* Unselected state circle: ensure it's visible against the background */
+  [data-testid="stRadio"] [data-baseweb="radio"] div:first-child {
+    border-color: var(--ink-2) !important;
+    background-color: var(--surface-2) !important;
+  }
+  /* Selected state circle: use botanical sage */
+  [data-testid="stRadio"] [data-checked="true"] div:first-child {
+    background-color: var(--surface) !important;
+    border-color: var(--sage) !important;
+  }
+  /* Selected inner dot: botanical green (matching slider) */
+  [data-testid="stRadio"] [data-checked="true"] div:first-child div {
+    background-color: var(--sage) !important;
+  }
+</style>
+""", unsafe_allow_html=True)
+
 def _render_farm_selector_sidebar():
     """
     Persistent farm selector rendered at the top of the sidebar on every modality.
@@ -1818,15 +1855,15 @@ if modality == "🏭 Indoor Vertical Farm":
         if _el_rates["iso"]:
             _el_delta = _el_e["industrial"] - _model_kwh
             _el_arrow = "▲" if _el_delta > 0.005 else ("▼" if _el_delta < -0.005 else "≈")
-            _el_col   = "#d97706" if _el_delta > 0.005 else ("#16a34a" if _el_delta < -0.005 else "#6b7280")
+            _el_col   = "#d4a845" if _el_delta > 0.005 else ("#52a066" if _el_delta < -0.005 else "#7a8070")
             _el_live  = " · ⚡ Live" if _el_e.get("live") else ""
             _el_html  = (
-                f"<div style='font-size:11px;color:#6b7280;margin:-4px 0 8px 0;"
-                f"padding:6px 8px;background:#f8f9fa;border-radius:4px;"
-                f"border-left:3px solid {_el_col};'>"
+                f"<div style='font-size:11px;color:#9ba390;margin:-4px 0 8px 0;"
+                f"padding:6px 8px;background:#252a25;border-radius:3px;"
+                f"border:1px solid #363c36;border-left:3px solid {_el_col};'>"
                 f"<b>Ref. rates ({_el_rates['iso']})</b> &nbsp;&middot;&nbsp; "
                 f"Electricity industrial: <b style='color:{_el_col};'>${_el_e['industrial']:.3f}/kWh {_el_arrow}</b> "
-                f"<span style='color:#9ca3af;'>(model ${_model_kwh:.3f})</span>"
+                f"<span style='color:#7a8070;'>(model ${_model_kwh:.3f})</span>"
                 f"&nbsp;&middot;&nbsp; Labour: <b>${_el_l['industrial_loaded']:.0f}/hr</b>"
                 f"{_el_live}</div>"
             )
@@ -3194,15 +3231,15 @@ elif modality == "🌿 High-Tech Greenhouse":
         if _el_rates["iso"]:
             _el_delta = _el_e["industrial"] - _model_kwh
             _el_arrow = "▲" if _el_delta > 0.005 else ("▼" if _el_delta < -0.005 else "≈")
-            _el_col   = "#d97706" if _el_delta > 0.005 else ("#16a34a" if _el_delta < -0.005 else "#6b7280")
+            _el_col   = "#d4a845" if _el_delta > 0.005 else ("#52a066" if _el_delta < -0.005 else "#7a8070")
             _el_live  = " · ⚡ Live" if _el_e.get("live") else ""
             _el_html  = (
-                f"<div style='font-size:11px;color:#6b7280;margin:-4px 0 8px 0;"
-                f"padding:6px 8px;background:#f8f9fa;border-radius:4px;"
-                f"border-left:3px solid {_el_col};'>"
+                f"<div style='font-size:11px;color:#9ba390;margin:-4px 0 8px 0;"
+                f"padding:6px 8px;background:#252a25;border-radius:3px;"
+                f"border:1px solid #363c36;border-left:3px solid {_el_col};'>"
                 f"<b>Ref. rates ({_el_rates['iso']})</b> &nbsp;&middot;&nbsp; "
                 f"Electricity industrial: <b style='color:{_el_col};'>${_el_e['industrial']:.3f}/kWh {_el_arrow}</b> "
-                f"<span style='color:#9ca3af;'>(model ${_model_kwh:.3f})</span>"
+                f"<span style='color:#7a8070;'>(model ${_model_kwh:.3f})</span>"
                 f"&nbsp;&middot;&nbsp; Labour: <b>${_el_l['industrial_loaded']:.0f}/hr</b>"
                 f"{_el_live}</div>"
             )
@@ -4190,15 +4227,15 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         if _el_rates["iso"]:
             _el_delta = _el_e["industrial"] - _model_kwh
             _el_arrow = "▲" if _el_delta > 0.005 else ("▼" if _el_delta < -0.005 else "≈")
-            _el_col   = "#d97706" if _el_delta > 0.005 else ("#16a34a" if _el_delta < -0.005 else "#6b7280")
+            _el_col   = "#d4a845" if _el_delta > 0.005 else ("#52a066" if _el_delta < -0.005 else "#7a8070")
             _el_live  = " · ⚡ Live" if _el_e.get("live") else ""
             _el_html  = (
-                f"<div style='font-size:11px;color:#6b7280;margin:-4px 0 8px 0;"
-                f"padding:6px 8px;background:#f8f9fa;border-radius:4px;"
-                f"border-left:3px solid {_el_col};'>"
+                f"<div style='font-size:11px;color:#9ba390;margin:-4px 0 8px 0;"
+                f"padding:6px 8px;background:#252a25;border-radius:3px;"
+                f"border:1px solid #363c36;border-left:3px solid {_el_col};'>"
                 f"<b>Ref. rates ({_el_rates['iso']})</b> &nbsp;&middot;&nbsp; "
                 f"Electricity industrial: <b style='color:{_el_col};'>${_el_e['industrial']:.3f}/kWh {_el_arrow}</b> "
-                f"<span style='color:#9ca3af;'>(model ${_model_kwh:.3f})</span>"
+                f"<span style='color:#7a8070;'>(model ${_model_kwh:.3f})</span>"
                 f"&nbsp;&middot;&nbsp; Labour: <b>${_el_l['industrial_loaded']:.0f}/hr</b>"
                 f"{_el_live}</div>"
             )

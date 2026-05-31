@@ -806,6 +806,41 @@ st.set_page_config(page_title="Farm Intelligence Map", page_icon="🗺️", layo
 inject_styles()
 from core.auth import require_login, current_user
 require_login()
+
+# ── Sidebar Dropdown & Expander Readability Fix ───────────────────────────
+st.markdown("""
+<style>
+  /* Selectboxes and Multiselects inside sidebar expanders */
+  /* Since expanders have a light background, these must use the light-theme palette 
+     to avoid dark-on-dark text from inheriting sidebar styles. */
+  [data-testid="stSidebar"] [data-testid="stExpander"] [data-baseweb="select"] > div {
+    background-color: var(--surface) !important;
+    border-color: var(--rule) !important;
+  }
+  [data-testid="stSidebar"] [data-testid="stExpander"] [data-baseweb="select"] * {
+    color: var(--ink) !important;
+    fill: var(--ink) !important;
+  }
+  /* Sidebar selectboxes outside of expanders: ensure borders use style tokens */
+  [data-testid="stSidebar"] [data-baseweb="select"] > div {
+    border-color: var(--rule-soft) !important;
+  }
+
+  /* ── Radio Button Visibility Fix ── */
+  [data-testid="stRadio"] [data-baseweb="radio"] div:first-child {
+    border-color: var(--ink-2) !important;
+    background-color: var(--surface-2) !important;
+  }
+  [data-testid="stRadio"] [data-checked="true"] div:first-child {
+    background-color: var(--surface) !important;
+    border-color: var(--sage) !important;
+  }
+  [data-testid="stRadio"] [data-checked="true"] div:first-child div {
+    background-color: var(--sage) !important;
+  }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("Farm Intelligence Map")
 st.markdown(
     "Explore your farm's environment through multiple intelligence layers. "
