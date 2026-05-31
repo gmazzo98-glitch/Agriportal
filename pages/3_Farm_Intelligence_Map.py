@@ -152,21 +152,52 @@ def reverse_geocode_country(lat: float, lng: float) -> tuple[str | None, str | N
 
 
 def run_overpass_query(query: str) -> list[dict]:
+    """
+    Queries Overpass API with fallback mirrors and smart retry logic.
+    - timeout=60s per endpoint (below Streamlit Cloud 90s limit)
+    - Retries on 429/503/502 (rate-limit/overload) only
+    - Does NOT retry on 400 (bad query) or 404
+    - Sends User-Agent to avoid mirror blocks
+    """
     endpoints = [
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
         "https://overpass.openstreetmap.fr/api/interpreter",
     ]
+    headers = {"User-Agent": "AgriculturalIntelligencePortal/1.0 (contact@agriportal.io)"}
+    last_error = "Unknown error"
     for endpoint in endpoints:
         try:
-            resp = requests.post(endpoint, data={"data": query}, timeout=95)
+            resp = requests.post(
+                endpoint,
+                data={"data": query},
+                headers=headers,
+                timeout=60,
+            )
+            if resp.status_code in (429, 502, 503):
+                # Rate-limited or overloaded — try next mirror
+                last_error = f"HTTP {resp.status_code} from {endpoint}"
+                continue
+            if resp.status_code == 400:
+                # Bad query syntax — no point retrying on other endpoints
+                raise RuntimeError(f"Overpass query syntax error (HTTP 400): {resp.text[:200]}")
             resp.raise_for_status()
             return resp.json().get("elements", [])
         except requests.exceptions.Timeout:
+            last_error = f"Timeout on {endpoint}"
             continue
-        except requests.exceptions.HTTPError:
+        except requests.exceptions.ConnectionError:
+            last_error = f"Connection error on {endpoint}"
             continue
-    raise RuntimeError("All Overpass API servers failed or timed out. Try reducing the radius.")
+        except RuntimeError:
+            raise
+        except Exception as e:
+            last_error = str(e)
+            continue
+    raise RuntimeError(
+        f"All Overpass API mirrors failed. Last error: {last_error}. "
+        "Try reducing the search radius or try again in a few minutes."
+    )
 
 
 def find_triangulation_target(target_label: str, lat: float, lng: float, search_radius_km: int, df_w: pd.DataFrame, df_l: pd.DataFrame) -> dict | None:
@@ -209,7 +240,7 @@ def find_triangulation_target(target_label: str, lat: float, lng: float, search_
     if not query_inner:
         return None 
 
-    query = f"[out:json][timeout:30];\n(\n  {query_inner});\nout center tags;"
+    query = f"[out:json][timeout:60];\n(\n  {query_inner});\nout center tags;"
     try:
         elements = run_overpass_query(query)
         if not elements:
@@ -350,9 +381,9 @@ def classify_facility(name: str, tags: dict) -> tuple[str, str]:
     return "Unknown / Other", "No match in waste dictionary"
 
 
-def fetch_waste_layer(lat: float, lng: float, radius_m: int) -> list[dict]:
+def _fetch_waste_layer_raw(lat: float, lng: float, radius_m: int) -> list[dict]:
     query = f"""
-    [out:json][timeout:90][maxsize:1073741824];
+    [out:json][timeout:60][maxsize:536870912];
     (
       node["landuse"="industrial"](around:{radius_m},{lat},{lng});
       way["landuse"="industrial"](around:{radius_m},{lat},{lng});
@@ -367,6 +398,16 @@ def fetch_waste_layer(lat: float, lng: float, radius_m: int) -> list[dict]:
     """
     return run_overpass_query(query)
 
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_waste_layer(lat: float, lng: float, radius_m: int) -> list[dict]:
+    """Cached wrapper — same coordinates + radius reuses results for 30 minutes."""
+    return _fetch_waste_layer_raw(lat, lng, radius_m)
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_logistics_layer(lat: float, lng: float, radius_m: int) -> list[dict]:
+    """Cached wrapper — same coordinates + radius reuses results for 30 minutes."""
+    return _fetch_logistics_layer_raw(lat, lng, radius_m)
 
 def build_waste_dataframe(elements: list[dict], search_lat: float, search_lon: float) -> pd.DataFrame:
     rows = []
@@ -444,19 +485,25 @@ def classify_infra(tags: dict):
     return best
 
 
-def fetch_logistics_layer(lat: float, lng: float, radius_m: int) -> list[dict]:
-    tag_filters = []
-    seen_keys   = set()
+def _fetch_logistics_layer_raw(lat: float, lng: float, radius_m: int) -> list[dict]:
+    # Deduplicate: collect unique (key, val) pairs — seen set covers both keyed and unkeyed
+    tag_filters  = []
+    seen_kv      = set()
+    seen_key_only = set()
     for key, val, *_ in INFRA_TYPES:
         if val is not None:
-            tag_filters.append(f'node["{key}"="{val}"](around:{radius_m},{lat},{lng});')
-            tag_filters.append(f'way["{key}"="{val}"](around:{radius_m},{lat},{lng});')
-        elif key not in seen_keys:
-            tag_filters.append(f'node["{key}"](around:{radius_m},{lat},{lng});')
-            tag_filters.append(f'way["{key}"](around:{radius_m},{lat},{lng});')
-            seen_keys.add(key)
+            kv = (key, val)
+            if kv not in seen_kv:
+                tag_filters.append(f'node["{key}"="{val}"](around:{radius_m},{lat},{lng});')
+                tag_filters.append(f'way["{key}"="{val}"](around:{radius_m},{lat},{lng});')
+                seen_kv.add(kv)
+        else:
+            if key not in seen_key_only:
+                tag_filters.append(f'node["{key}"](around:{radius_m},{lat},{lng});')
+                tag_filters.append(f'way["{key}"](around:{radius_m},{lat},{lng});')
+                seen_key_only.add(key)
     inner = "\n  ".join(tag_filters)
-    query = f"[out:json][timeout:90][maxsize:1073741824];\n(\n  {inner}\n);\nout center tags;"
+    query = f"[out:json][timeout:60][maxsize:536870912];\n(\n  {inner}\n);\nout center tags;"
     return run_overpass_query(query)
 
 
@@ -929,6 +976,15 @@ with st.sidebar:
         # Clear old caches instantly so ghost data doesn't persist if a massive query fails
         st.session_state["fim_waste_df"] = None
         st.session_state["fim_logistics_df"] = None # Keep emojis in spinner
+        # Warn user about expected query time at large radii
+        if radius_km > 40:
+            st.warning(
+                f"⏳ Large search radius ({radius_km} km) — this may take 60–90 seconds. "
+                "If the search times out, reduce the radius and try again.",
+                icon="⚠️",
+            )
+        elif radius_km > 20:
+            st.info(f"⏳ Querying {radius_km} km radius — expect 20–40 seconds.")
         
         if layer_waste:
             with st.spinner("♻️ Querying waste sources (may take up to 90s for large radius)…"):
