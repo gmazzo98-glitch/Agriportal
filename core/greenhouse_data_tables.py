@@ -30,7 +30,7 @@ GREENHOUSE_CROPS = {
         "wf": 22.0, "tr": 0.90, "price_low": 1.10, "price_base": 1.80, "price_high": 2.60,
         "natural_dli_fraction": 0.60, "structure_type": "venlo"
     },
-    "Sweet Pepper": {
+    "Sweet Pepper (GH Substrate)": {
         "cycle": 330, "days_between": 0, "yield": 31.5, "yield_h2": 0, "yield_h3": 0,
         "dli": 25.0, "ec": 2.8, "water": 950, "nutrient": 0.16, "seed": 0.55, "substrate": 1.30,
         "wf": 38.0, "tr": 0.75, "price_low": 2.10, "price_base": 2.85, "price_high": 4.20,
@@ -118,13 +118,6 @@ GREENHOUSE_CROPS = {
         "dli": 24.0, "ec": 2.5, "water": 800.0, "nutrient": 0.16, "seed": 0.60, "substrate": 1.20,
         "wf": 28.0, "tr": 0.85, "price_low": 2.50, "price_base": 4.50, "price_high": 7.00,
         "natural_dli_fraction": 0.68, "structure_type": "venlo"
-    },
-    # Source: KWIN, WUR (Heated venlo substrate)
-    "Aubergine (Venlo)": {
-        "cycle": 330, "days_between": 0, "yield": 55.0, "yield_h2": 0.0, "yield_h3": 0.0,
-        "dli": 22.0, "ec": 2.0, "water": 1000.0, "nutrient": 0.15, "seed": 0.70, "substrate": 1.20,
-        "wf": 25.0, "tr": 0.88, "price_low": 1.20, "price_base": 1.80, "price_high": 2.80,
-        "natural_dli_fraction": 0.65, "structure_type": "venlo"
     },
     # Source: AHDB Soft Fruit, Wageningen Blueberry Research
     "Blueberry (Protected Cultivation)": {
@@ -232,7 +225,7 @@ POLYTUNNEL_CROPS = {
         "wf": 35.0, "tr": 0.88, "price_low": 0.80, "price_base": 1.25, "price_high": 1.95,
         "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
     },
-    "Sweet Pepper": {
+    "Sweet Pepper (Polytunnel)": {
         "cycle": 170, "days_between": 0, "yield": 20.0, "yield_h2": 0, "yield_h3": 0,
         "dli": 25.0, "ec": 0.0, "water": 380, "nutrient": 0.40, "seed": 0.50, "substrate": 0.25,
         "wf": 65.0, "tr": 0.75, "price_low": 1.40, "price_base": 1.95, "price_high": 2.80,
@@ -240,13 +233,13 @@ POLYTUNNEL_CROPS = {
     },
     "Strawberry (Elevated)": {
         "cycle": 135, "days_between": 0, "yield": 8.5, "yield_h2": 0, "yield_h3": 0,
-        "dli": 22.0, "ec": 1.6, "water": 280, "nutrient": 0.85, "seed": 2.40, "substrate": 3.60,
+        "dli": 22.0, "ec": 0.0, "water": 280, "nutrient": 0.85, "seed": 2.40, "substrate": 3.60,
         "wf": 85.0, "tr": 0.70, "price_low": 3.50, "price_base": 5.20, "price_high": 8.50,
         "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
     },
     "Raspberry (Primocane)": {
         "cycle": 105, "days_between": 0, "yield": 2.4, "yield_h2": 0, "yield_h3": 0,
-        "dli": 22.0, "ec": 1.5, "water": 350, "nutrient": 0.75, "seed": 4.50, "substrate": 4.80,
+        "dli": 22.0, "ec": 0.0, "water": 350, "nutrient": 0.75, "seed": 4.50, "substrate": 4.80,
         "wf": 180.0, "tr": 0.72, "price_low": 8.50, "price_base": 12.40, "price_high": 18.20,
         "natural_dli_fraction": 1.0, "structure_type": "polytunnel"
     },

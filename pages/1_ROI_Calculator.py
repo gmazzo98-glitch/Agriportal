@@ -106,6 +106,9 @@ def _render_farm_selector_sidebar():
                     st.session_state["gh_crop_source"]     = _sl_gh_src
                     _sl_gh_dict = POLYTUNNEL_CROPS if _sl_gh_src == "Polytunnel" else GREENHOUSE_CROPS
                     _sl_gh_crop = _farm.get("crop", "")
+                    # Migration: Sweet Pepper renamed
+                    if _sl_gh_crop == "Sweet Pepper":
+                        _sl_gh_crop = "Sweet Pepper (GH Substrate)"
                     st.session_state["gh_crop"]            = _sl_gh_crop if _sl_gh_crop in _sl_gh_dict else list(_sl_gh_dict.keys())[0]
                     st.session_state["aq_country"]         = _farm.get("country", "Germany")
                     st.session_state["aq_plant_crop"]      = _farm.get("crop", "Lettuce (Butterhead)")
@@ -1526,6 +1529,11 @@ if "_pending_farm_load" in st.session_state:
     _gh_crop_source_val = "Polytunnel" if _gh_crop_source_raw == "polytunnel" else "Greenhouse"
     _gh_valid_dict      = POLYTUNNEL_CROPS if _gh_crop_source_val == "Polytunnel" else GREENHOUSE_CROPS
     _gh_crop_fallback   = _pf.get("crop", "Tomato (Beef)")
+    # Migration: rename Sweet Pepper to modality-specific name after data_tables rename
+    _gh_crop_fallback   = (
+        "Sweet Pepper (GH Substrate)" if _gh_crop_fallback == "Sweet Pepper"
+        else _gh_crop_fallback
+    )
     _gh_valid_fallback  = _gh_crop_fallback if _gh_crop_fallback in _gh_valid_dict else list(_gh_valid_dict.keys())[0]
     st.session_state["gh_country"]            = _pf.get("country", "Germany")
     st.session_state["gh_crop"]               = _gh_valid_fallback
@@ -1563,6 +1571,11 @@ if "_pending_farm_load" in st.session_state:
 
     # ── AQ keys ───────────────────────────────────────────────────────────────
     _aq_crop_fallback = _pf.get("crop", "Lettuce (Romaine)")
+    # Migration: same rename guard for aquaponics plant-side load
+    _aq_crop_fallback = (
+        "Sweet Pepper (GH Substrate)" if _aq_crop_fallback == "Sweet Pepper"
+        else _aq_crop_fallback
+    )
     st.session_state["aq_country"]            = _pf.get("country", "Germany")
     # Restore fish species if saved on the farm record
     if _pf.get("fish_species") and _pf["fish_species"] in list(FISH_SPECIES.keys()):
