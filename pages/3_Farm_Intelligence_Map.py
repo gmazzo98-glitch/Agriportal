@@ -566,7 +566,14 @@ def render_farm_linking_ui(plat, plng, matched_country, prefix: str):
     """
     try:
         sb         = get_supabase()
-        farms_resp = sb.table("farms").select("id, name, lat, lon").order("created_at", desc=True).execute()
+        _uid       = current_user()
+        farms_resp = (
+            sb.table("farms")
+            .select("id, name, lat, lon")
+            .eq("owner_id", _uid)
+            .order("created_at", desc=True)
+            .execute()
+        ) if _uid else type("_R", (), {"data": []})()
         farms_list = farms_resp.data or []
     except Exception:
         farms_list = []
@@ -709,7 +716,7 @@ def execute_farm_save(link_mode, target_farm, new_farm_name, plat, plng, matched
 
 st.set_page_config(page_title="Farm Intelligence Map", page_icon="🗺️", layout="wide")
 inject_styles()
-from core.auth import require_login
+from core.auth import require_login, current_user
 require_login()
 st.title("Farm Intelligence Map")
 st.markdown(
@@ -1003,7 +1010,7 @@ st.caption("Click anywhere on the map to move the search origin, then confirm.")
 # Centre on pending location if one exists, so the map does not jump back on rerun
 _map_center_lat = st.session_state.get("fim_pending_lat") or lat
 _map_center_lng = st.session_state.get("fim_pending_lng") or lng
-m = folium.Map(location=[_map_center_lat, _map_center_lng], zoom_start=12, tiles="CartoDB dark_matter")
+m = folium.Map(location=[_map_center_lat, _map_center_lng], zoom_start=12, tiles="CartoDB Positron")
 
 # Origin marker — shows current confirmed origin
 folium.Marker( # Keep icon
