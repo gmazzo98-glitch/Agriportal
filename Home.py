@@ -4,7 +4,8 @@ import datetime as _dt
 from supabase import create_client, Client
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from core._styles import inject_styles, inject_home_styles
+from core._styles import inject_styles
+from core._home_styles import inject_home_styles
 from core.auth import require_login, current_user, logout
 from core.farm_context import (
     load_farm, clear_farm, get_active_farm,
