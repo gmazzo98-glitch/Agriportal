@@ -1028,6 +1028,44 @@ with st.sidebar:
     else:
         st.caption("⚪ ORS road routing inactive — add `ORS_API_KEY` to secrets for real road distances")
 
+    with st.expander("🔧 Debug", expanded=False):
+        _wdf = st.session_state.get("fim_waste_df")
+        _ldf = st.session_state.get("fim_logistics_df")
+        _af  = st.session_state.get("active_farm") or {}
+        _meta = _af.get("metadata") or {}
+
+        st.markdown(f"**Farm:** `{_af.get('name','—')}` id=`{_af.get('id','—')}`")
+        st.markdown(f"**Synced farm id:** `{st.session_state.get('fim_synced_farm_id','—')}`")
+        st.markdown(f"**fim_lat/lng:** `{st.session_state.get('fim_lat','—')}, {st.session_state.get('fim_lng','—')}`")
+
+        st.markdown("**Waste DF:**")
+        if _wdf is None:
+            st.caption("None")
+        else:
+            st.caption(f"{len(_wdf)} rows · cols: `{list(_wdf.columns)}`")
+            if "lat" in _wdf.columns and "lon" in _wdf.columns:
+                _bad = _wdf[["lat","lon"]].apply(pd.to_numeric, errors="coerce").isna().any(axis=1).sum()
+                st.caption(f"Invalid lat/lon rows: {int(_bad)}")
+
+        st.markdown("**Logistics DF:**")
+        if _ldf is None:
+            st.caption("None")
+        else:
+            st.caption(f"{len(_ldf)} rows · cols: `{list(_ldf.columns)}`")
+            if "lat" in _ldf.columns and "lon" in _ldf.columns:
+                _bad = _ldf[["lat","lon"]].apply(pd.to_numeric, errors="coerce").isna().any(axis=1).sum()
+                st.caption(f"Invalid lat/lon rows: {int(_bad)}")
+
+        st.markdown("**Saved metadata keys:**")
+        st.caption(str(list(_meta.keys())) if _meta else "none")
+        st.caption(f"Saved waste records: {len(_meta.get('fim_waste_data', []))}")
+        st.caption(f"Saved logistics records: {len(_meta.get('fim_logistics_data', []))}")
+
+        if st.button("🗑️ Clear session cache (force fresh state)", use_container_width=True, key="fim_debug_clear"):
+            for _k in [k for k in st.session_state if k.startswith("fim_")]:
+                del st.session_state[_k]
+            st.rerun()
+
     with st.expander("Location Suitability Finder", expanded=False): # Remove emoji from expander title
         st.caption(
             "Select up to 3 targets. The map will automatically search a wide radius, "
