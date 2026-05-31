@@ -81,7 +81,10 @@ def _ors_road_distances(src_lat: float, src_lon: float, targets: list[dict]) -> 
         row = data["distances"][0]          # source=0 → one row
         return [round(d, 2) if d is not None else None for d in row[1:]]
     except Exception as e:
-        print(f"ORS road distance failed: {e}")
+        try:
+            st.sidebar.warning(f"ORS road distances unavailable: {e}. Showing straight-line distances.")
+        except Exception:
+            pass
         return [None] * len(targets)
 
 
@@ -811,18 +814,19 @@ st.markdown(
 
 # ── Session state ─────────────────────────────────────────────────────────────
 
-# Check for active farm and sync coordinates + rehydrate saved FIM data from metadata
+# Check for active farm and sync coordinates + rehydrate saved FIM data from metadata.
+# Only sync when the active farm *changes* (new farm selected), not on every rerun —
+# otherwise the sync clears freshly-fetched search results whenever the user searches
+# at a location different from the active farm's saved coordinates.
 _active_farm_init = st.session_state.get("active_farm")
 if _active_farm_init and _active_farm_init.get("lat") and _active_farm_init.get("lon"):
-    _coords_changed = (
-        st.session_state.get("fim_lat") != _active_farm_init["lat"] or
-        st.session_state.get("fim_lng") != _active_farm_init["lon"]
-    )
-    if _coords_changed:
+    _farm_id = _active_farm_init.get("id")
+    if _farm_id != st.session_state.get("fim_synced_farm_id"):
         st.session_state["fim_lat"] = _active_farm_init["lat"]
         st.session_state["fim_lng"] = _active_farm_init["lon"]
         st.session_state["fim_waste_df"]     = None
         st.session_state["fim_logistics_df"] = None
+        st.session_state["fim_synced_farm_id"] = _farm_id
 
     # Rehydrate saved FIM data from farm metadata if session cache is empty
     _raw_meta_init = _active_farm_init.get("metadata")
@@ -868,6 +872,7 @@ for key, default in [
     ("fim_suitability_active", False),
     ("fim_suitability_count",  2),
     ("fim_suitability_results", {}),
+    ("fim_synced_farm_id",  None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
