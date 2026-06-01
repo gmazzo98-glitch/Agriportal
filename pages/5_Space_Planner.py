@@ -6,6 +6,7 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from supabase import create_client, Client
 from core._styles import inject_styles
+ from core._charts import style_fig
 from core.farm_context import render_farm_context_sidebar, get_active_farm
 from core.sun import get_sun_position, get_daily_sun_path, get_monthly_sun_summary, get_sunrise_sunset
 import plotly.graph_objects as go
@@ -3448,6 +3449,7 @@ if active_farm and active_farm.get("lat") and active_farm.get("lon"):
         yaxis=dict(title="DLI (mol/m²/day)", showgrid=True, gridcolor="#e8e3d4"),
         yaxis2=dict(title="Hours / Degrees", overlaying="y", side="right", showgrid=False),
     )
+    style_fig(_fig_sun)
     st.plotly_chart(_fig_sun, use_container_width=True)
 
     if _min_dli:

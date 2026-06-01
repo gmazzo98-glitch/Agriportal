@@ -635,29 +635,25 @@ li[role="option"][aria-selected="true"] {
    var(--sage) is a deep green in light mode and would be low-contrast on the
    dark sidebar; pin marks to the bright dark-mode green + a light ring. */
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] > div:first-of-type {
-  border-color: #7a8070 !important;
+  border-color: #5a6258 !important;
 }
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:has(input:checked) > div:first-of-type {
   border-color: #62b076 !important;
-  background: #ffffff !important;
 }
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:has(input:checked) > div:first-of-type > div {
   background: #62b076 !important;
 }
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] p { color: #d6d2c8 !important; }
 [data-testid="stSidebar"] .stRadio label[data-baseweb="radio"]:has(input:checked) p {
-  color: #ffffff !important; font-weight: 600 !important;
+  color: #8fd6a0 !important; font-weight: 600 !important;
 }
 [data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"] > span:first-of-type,
 [data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"] > div:first-of-type {
-  background: #252a25 !important; border-color: #7a8070 !important;
+  background: #252a25 !important; border-color: #5a6258 !important;
 }
 [data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"]:has(input:checked) > span:first-of-type,
 [data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"]:has(input:checked) > div:first-of-type {
-  background: #ffffff !important; border-color: #62b076 !important;
-}
-[data-testid="stSidebar"] .stCheckbox label[data-baseweb="checkbox"]:has(input:checked) svg {
-  fill: #62b076 !important;
+  background: #62b076 !important; border-color: #62b076 !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -836,7 +832,9 @@ li[role="option"][aria-selected="true"] {
   padding:       4px;
 }
 [data-testid="stPlotlyChart"] iframe { background: transparent !important; }
-/* SVG axis labels, ticks, legend text */
+/* SVG axis labels, ticks, legend, annotations — re-coloured to theme ink.
+   (Data text that sits on a coloured fill — bar labels, pie slice text — is
+   left to the figure's own explicit colour so white-on-sage etc. survives.) */
 [data-testid="stPlotlyChart"] .gtitle,
 [data-testid="stPlotlyChart"] .g-xtitle  text,
 [data-testid="stPlotlyChart"] .g-ytitle  text,
@@ -844,6 +842,10 @@ li[role="option"][aria-selected="true"] {
 [data-testid="stPlotlyChart"] .ytick     text,
 [data-testid="stPlotlyChart"] .legend    text,
 [data-testid="stPlotlyChart"] .legendtext { fill: var(--ink) !important; color: var(--ink) !important; }
+/* Modebar (the toolbar that appears on hover) */
+[data-testid="stPlotlyChart"] .modebar              { background: transparent !important; }
+[data-testid="stPlotlyChart"] .modebar-btn path     { fill: var(--ink-3) !important; }
+[data-testid="stPlotlyChart"] .modebar-btn:hover path { fill: var(--sage) !important; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MISC COMPONENTS

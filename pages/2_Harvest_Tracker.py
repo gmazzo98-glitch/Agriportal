@@ -8,6 +8,8 @@ from datetime import date, timedelta, datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.data_tables import COUNTRIES, CROPS, LIGHTS
+from core._charts import style_fig
+from core._tables import severity_cell
 from core.greenhouse_data_tables import GREENHOUSE_CROPS, POLYTUNNEL_CROPS, FISH_SPECIES
 from core._styles import inject_styles
 from core.farm_context import render_farm_context_sidebar
@@ -1029,6 +1031,7 @@ with tab1:
                            zerolinecolor="#d9d4c5"),
                 xaxis=dict(showgrid=False),
             )
+            style_fig(_fig_cmp)
             st.plotly_chart(_fig_cmp, use_container_width=True)
         else:
             st.info("No model snapshots yet — run the ROI Calculator for each farm and save.")
@@ -2261,6 +2264,7 @@ with tab4:
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 margin=dict(t=30, b=20),
             )
+            style_fig(fig_pl)
             st.plotly_chart(fig_pl, use_container_width=True)
 
             # ── Cost breakdown chart ──────────────────────────────────────────
@@ -2285,6 +2289,7 @@ with tab4:
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 margin=dict(t=30, b=20),
             )
+            style_fig(fig_costs)
             st.plotly_chart(fig_costs, use_container_width=True)
 
             # ── Deviation metrics ─────────────────────────────────────────────
@@ -2392,12 +2397,7 @@ with tab4:
                 styles = [""] * len(row)
                 if "EBITDA Variance" in row.index:
                     idx = list(row.index).index("EBITDA Variance")
-                    val = row["EBITDA Variance"]
-                    if pd.notna(val):
-                        if val >= 0:
-                            styles[idx] = "background-color: rgba(0,229,160,0.12); color: #00e5a0"
-                        else:
-                            styles[idx] = "background-color: rgba(255,77,77,0.12); color: #ff4d4d"
+                    styles[idx] = severity_cell(row["EBITDA Variance"], hi=0, mid=-1, reverse=True)
                 return styles
 
             st.dataframe(
@@ -3216,6 +3216,7 @@ with tab5:
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     margin=dict(t=20, b=20),
                 )
+                style_fig(fig_dcf2)
                 st.plotly_chart(fig_dcf2, use_container_width=True)
 
                 orig_npv   = orig_dcf[-1]["cumulative_npv"] if orig_dcf else 0
@@ -3319,6 +3320,7 @@ with tab5:
                         plot_bgcolor="rgba(0,0,0,0)",
                         font=dict(color="#ccc"),
                     )
+                    style_fig(_gantt_fig)
                     st.plotly_chart(_gantt_fig, use_container_width=True)
                     st.caption("Solid bars = open cycles · Faded bars = closed/failed · Dashed red line = today")
 

@@ -25,6 +25,9 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from supabase import create_client, Client
 from core._styles import inject_styles
+from core._map import theme_map
+from core._charts import style_fig
+from core._tables import match_row
 from core.farm_context import render_farm_context_sidebar
 
 # ═════════════════════════════════════════════════════════════════════════════ # Keep page_icon emoji, but remove from title
@@ -62,32 +65,26 @@ def _ors_road_distances(src_lat: float, src_lon: float, targets: list[dict]) -> 
     locations = [[src_lon, src_lat]] + [[t["lon"], t["lat"]] for t in targets]
     payload = {
         "locations": locations,
-        "sources":   [0],
-        "metrics":   ["duration"],   # free tier only supports duration (seconds)
+        "sources": [0],
+        "metrics": ["distance"],
+        "units": "km",
     }
     try:
         resp = requests.post(
             "https://api.openrouteservice.org/v2/matrix/driving-car",
             json=payload,
             headers={
-                "Accept":        "application/json, application/geo+json",
                 "Authorization": api_key,
-                "Content-Type":  "application/json; charset=utf-8",
+                "Content-Type": "application/json",
             },
             timeout=15,
         )
         resp.raise_for_status()
         data = resp.json()
-        row = data["durations"][0]          # source=0 → one row, values in seconds
-        # Convert seconds → km using 60 km/h average road speed (free tier has no distance metric)
-        AVG_SPEED_KMH = 60.0
-        st.session_state.pop("_ors_last_error", None)  # clear any previous error on success
-        return [round(s / 3600 * AVG_SPEED_KMH, 2) if s is not None else None for s in row[1:]]
+        row = data["distances"][0]          # source=0 → one row
+        return [round(d, 2) if d is not None else None for d in row[1:]]
     except Exception as e:
-        try:
-            st.session_state["_ors_last_error"] = str(e)
-        except Exception:
-            pass
+        print(f"ORS road distance failed: {e}")
         return [None] * len(targets)
 
 
@@ -127,7 +124,7 @@ def add_osrm_distances(df: pd.DataFrame, src_lat: float, src_lon: float) -> pd.D
     for i, idx in enumerate(subset.index):
         if road_km[i] is not None:
             df.at[idx, "Distance (km)"] = road_km[i]
-            df.at[idx, "Routing"] = "ORS (Drive time)"
+            df.at[idx, "Routing"] = "ORS (Road)"
 
     df = df.sort_values("Distance (km)").reset_index(drop=True)
     return df
@@ -808,41 +805,6 @@ st.set_page_config(page_title="Farm Intelligence Map", page_icon="🗺️", layo
 inject_styles()
 from core.auth import require_login, current_user
 require_login()
-
-# ── Sidebar Dropdown & Expander Readability Fix ───────────────────────────
-st.markdown("""
-<style>
-  /* Selectboxes and Multiselects inside sidebar expanders */
-  /* Since expanders have a light background, these must use the light-theme palette 
-     to avoid dark-on-dark text from inheriting sidebar styles. */
-  [data-testid="stSidebar"] [data-testid="stExpander"] [data-baseweb="select"] > div {
-    background-color: var(--surface) !important;
-    border-color: var(--rule) !important;
-  }
-  [data-testid="stSidebar"] [data-testid="stExpander"] [data-baseweb="select"] * {
-    color: var(--ink) !important;
-    fill: var(--ink) !important;
-  }
-  /* Sidebar selectboxes outside of expanders: ensure borders use style tokens */
-  [data-testid="stSidebar"] [data-baseweb="select"] > div {
-    border-color: var(--rule-soft) !important;
-  }
-
-  /* ── Radio Button Visibility Fix ── */
-  [data-testid="stRadio"] [data-baseweb="radio"] div:first-child {
-    border-color: var(--ink-2) !important;
-    background-color: var(--surface-2) !important;
-  }
-  [data-testid="stRadio"] [data-checked="true"] div:first-child {
-    background-color: var(--surface) !important;
-    border-color: var(--sage) !important;
-  }
-  [data-testid="stRadio"] [data-checked="true"] div:first-child div {
-    background-color: var(--sage) !important;
-  }
-</style>
-""", unsafe_allow_html=True)
-
 st.title("Farm Intelligence Map")
 st.markdown(
     "Explore your farm's environment through multiple intelligence layers. "
@@ -852,19 +814,18 @@ st.markdown(
 
 # ── Session state ─────────────────────────────────────────────────────────────
 
-# Check for active farm and sync coordinates + rehydrate saved FIM data from metadata.
-# Only sync when the active farm *changes* (new farm selected), not on every rerun —
-# otherwise the sync clears freshly-fetched search results whenever the user searches
-# at a location different from the active farm's saved coordinates.
+# Check for active farm and sync coordinates + rehydrate saved FIM data from metadata
 _active_farm_init = st.session_state.get("active_farm")
 if _active_farm_init and _active_farm_init.get("lat") and _active_farm_init.get("lon"):
-    _farm_id = _active_farm_init.get("id")
-    if _farm_id != st.session_state.get("fim_synced_farm_id"):
+    _coords_changed = (
+        st.session_state.get("fim_lat") != _active_farm_init["lat"] or
+        st.session_state.get("fim_lng") != _active_farm_init["lon"]
+    )
+    if _coords_changed:
         st.session_state["fim_lat"] = _active_farm_init["lat"]
         st.session_state["fim_lng"] = _active_farm_init["lon"]
         st.session_state["fim_waste_df"]     = None
         st.session_state["fim_logistics_df"] = None
-        st.session_state["fim_synced_farm_id"] = _farm_id
 
     # Rehydrate saved FIM data from farm metadata if session cache is empty
     _raw_meta_init = _active_farm_init.get("metadata")
@@ -910,7 +871,6 @@ for key, default in [
     ("fim_suitability_active", False),
     ("fim_suitability_count",  2),
     ("fim_suitability_results", {}),
-    ("fim_synced_farm_id",  None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -1049,66 +1009,7 @@ with st.sidebar:
 
     st.divider()
     search_clicked = st.button("🔍 Search All Active Layers", use_container_width=True)
-    st.caption("**Data:** OpenStreetMap contributors via Overpass API.")
-
-    # ORS routing status
-    try:
-        _ors_key_present = bool(st.secrets.get("ORS_API_KEY", ""))
-    except Exception:
-        _ors_key_present = False
-    if _ors_key_present:
-        _ors_err = st.session_state.get("_ors_last_error")
-        if _ors_err:
-            st.caption(f"🔴 ORS road routing: key found but last call failed — {_ors_err}")
-        else:
-            st.caption("🟢 ORS road routing active (priority infrastructure uses real road distances)")
-    else:
-        st.caption("⚪ ORS road routing inactive — add `ORS_API_KEY` to secrets for real road distances")
-
-    with st.expander("🔧 Debug", expanded=False):
-        _wdf = st.session_state.get("fim_waste_df")
-        _ldf = st.session_state.get("fim_logistics_df")
-        _af  = st.session_state.get("active_farm") or {}
-        _raw_meta = _af.get("metadata") or {}
-        if isinstance(_raw_meta, str):
-            import json as _json
-            try:
-                _raw_meta = _json.loads(_raw_meta)
-            except Exception:
-                _raw_meta = {}
-        _meta = _raw_meta if isinstance(_raw_meta, dict) else {}
-
-        st.markdown(f"**Farm:** `{_af.get('name','—')}` id=`{_af.get('id','—')}`")
-        st.markdown(f"**Synced farm id:** `{st.session_state.get('fim_synced_farm_id','—')}`")
-        st.markdown(f"**fim_lat/lng:** `{st.session_state.get('fim_lat','—')}, {st.session_state.get('fim_lng','—')}`")
-
-        st.markdown("**Waste DF:**")
-        if _wdf is None:
-            st.caption("None")
-        else:
-            st.caption(f"{len(_wdf)} rows · cols: `{list(_wdf.columns)}`")
-            if "lat" in _wdf.columns and "lon" in _wdf.columns:
-                _bad = _wdf[["lat","lon"]].apply(pd.to_numeric, errors="coerce").isna().any(axis=1).sum()
-                st.caption(f"Invalid lat/lon rows: {int(_bad)}")
-
-        st.markdown("**Logistics DF:**")
-        if _ldf is None:
-            st.caption("None")
-        else:
-            st.caption(f"{len(_ldf)} rows · cols: `{list(_ldf.columns)}`")
-            if "lat" in _ldf.columns and "lon" in _ldf.columns:
-                _bad = _ldf[["lat","lon"]].apply(pd.to_numeric, errors="coerce").isna().any(axis=1).sum()
-                st.caption(f"Invalid lat/lon rows: {int(_bad)}")
-
-        st.markdown("**Saved metadata keys:**")
-        st.caption(str(list(_meta.keys())) if _meta else "none")
-        st.caption(f"Saved waste records: {len(_meta.get('fim_waste_data', []))}")
-        st.caption(f"Saved logistics records: {len(_meta.get('fim_logistics_data', []))}")
-
-        if st.button("🗑️ Clear session cache (force fresh state)", use_container_width=True, key="fim_debug_clear"):
-            for _k in [k for k in st.session_state if k.startswith("fim_")]:
-                del st.session_state[_k]
-            st.rerun()
+    st.caption("**Data:** OpenStreetMap contributors via Overpass API.") # Keep emoji in button
 
     with st.expander("Location Suitability Finder", expanded=False): # Remove emoji from expander title
         st.caption(
@@ -1235,49 +1136,41 @@ if _active_farm_map and _active_farm_map.get("lat") and _active_farm_map.get("lo
 waste_cached = st.session_state.get("fim_waste_df")
 if layer_waste and waste_cached is not None and not waste_cached.empty:
     for _, row in waste_cached.iterrows():
-        try:
-            hex_color = INDUSTRY_COLORS.get(row.get("Predicted Industry", "Unknown / Other"), "#505050")
-            dist_label = f"{row['Distance (km)']} km" if "Distance (km)" in row.index else "—"
-            folium.CircleMarker(
-                location=[row["lat"], row["lon"]],
-                radius=7,
-                color=hex_color, fill=True, fill_color=hex_color, fill_opacity=0.85,
-                tooltip=f"♻️ {row.get('Company Name','?')} | {row.get('Predicted Industry','?')} | {dist_label}",
-                popup=folium.Popup(
-                    f"<b>♻️ {row.get('Company Name','?')}</b><br>"
-                    f"Industry: {row.get('Predicted Industry','?')}<br>"
-                    f"Waste: {row.get('Potential Fertilizer Waste','?')}<br>"
-                    f"NPK: {row.get('NPK Label','?')}<br>"
-                    f"Distance: {dist_label}",
-                    max_width=300,
-                ),
-            ).add_to(m)
-        except Exception:
-            continue
+        hex_color = INDUSTRY_COLORS.get(row["Predicted Industry"], "#505050") # Keep emoji in tooltip and popup
+        folium.CircleMarker(
+            location=[row["lat"], row["lon"]],
+            radius=7,
+            color=hex_color, fill=True, fill_color=hex_color, fill_opacity=0.85,
+            tooltip=f"♻️ {row['Company Name']} | {row['Predicted Industry']} | {row['Distance (km)']} km",
+            popup=folium.Popup(
+                f"<b>♻️ {row['Company Name']}</b><br>"
+                f"Industry: {row['Predicted Industry']}<br>"
+                f"Waste: {row['Potential Fertilizer Waste']}<br>"
+                f"NPK: {row['NPK Label']}<br>"
+                f"Distance: {row['Distance (km)']} km",
+                max_width=300,
+            ),
+        ).add_to(m)
 
 # Plot logistics layer results
 logistics_cached = st.session_state.get("fim_logistics_df")
 if layer_logistics and logistics_cached is not None and not logistics_cached.empty:
     for _, row in logistics_cached.iterrows():
-        try:
-            _lcolor    = row.get("color", "#969696")
-            dist_label = f"{row['Distance (km)']} km" if "Distance (km)" in row.index else "—"
-            folium.CircleMarker(
-                location=[row["lat"], row["lon"]],
-                radius=9,
-                color=_lcolor, fill=True, fill_color=_lcolor, fill_opacity=0.75,
-                tooltip=f"🚛 {row.get('Name','?')} | {row.get('Type','?')} | {dist_label}",
-                popup=folium.Popup(
-                    f"<b>🚛 {row.get('Name','?')}</b><br>"
-                    f"Type: {row.get('Type','?')}<br>"
-                    f"Distance: {dist_label}<br>"
-                    f"Address: {row.get('Address','—')}",
-                    max_width=260,
-                ),
-            ).add_to(m)
-        except Exception:
-            continue
+        folium.CircleMarker( # Keep emoji in tooltip and popup
+            location=[row["lat"], row["lon"]],
+            radius=9,
+            color=row["color"], fill=True, fill_color=row["color"], fill_opacity=0.75,
+            tooltip=f"🚛 {row['Name']} | {row['Type']} | {row['Distance (km)']} km",
+            popup=folium.Popup(
+                f"<b>🚛 {row['Name']}</b><br>"
+                f"Type: {row['Type']}<br>"
+                f"Distance: {row['Distance (km)']} km<br>"
+                f"Address: {row['Address']}",
+                max_width=260,
+            ),
+        ).add_to(m)
 
+theme_map(m)
 map_result = st_folium(m, width="100%", height=540, returned_objects=["last_clicked"], key="fim_main_map")
 
 # Capture map click
@@ -1310,15 +1203,14 @@ if legend_html:
 st.divider()
 
 # ── Deferred Pre-computations & Search Execution ──
-# This block runs AFTER the map has been sent to the browser, ensuring the map remains visible.
-# NOTE: do NOT add "or suitability_active" here — that would create an infinite rerun loop
-# whenever the suitability checkbox is ticked (block runs → st.rerun() → block runs → …).
-if search_clicked:
+# This block runs AFTER the map has been sent to the browser, ensuring the map remains visible
+if search_clicked or st.session_state.get("fim_suitability_active", False):
     # Clear old caches instantly so ghost data doesn't persist if a massive query fails
-    st.session_state["fim_waste_df"] = None
-    st.session_state["fim_logistics_df"] = None
+    if search_clicked:
+        st.session_state["fim_waste_df"] = None
+        st.session_state["fim_logistics_df"] = None
 
-    # ── Suitability Finder Logic (runs as part of the same Search click) ──
+    # ── Suitability Finder Logic ──
     if st.session_state.get("fim_suitability_active", False):
         _search_radius_km = st.session_state.get("fim_suit_search_radius", 50)
         _suit_results = {}
@@ -1480,9 +1372,7 @@ if layer_waste and waste_cached is not None:
             display_df        = df_w[df_w["Predicted Industry"] != "Unknown / Other"] if show_matched_only else df_w
 
             def highlight_matched(row):
-                if row["Predicted Industry"] != "Unknown / Other":
-                    return ["background-color: rgba(0,229,160,0.08)"] * len(row)
-                return [""] * len(row)
+                return match_row(row, condition=row["Predicted Industry"] != "Unknown / Other")
 
             st.dataframe(
                 display_df[display_cols].style.apply(highlight_matched, axis=1),
@@ -1500,12 +1390,10 @@ if layer_waste and waste_cached is not None:
                 fig = px.bar(wc_sorted, x="Count", y="Waste Stream", orientation="h",
                              text="Count", color="Count", color_continuous_scale="Greens")
                 fig.update_traces(textposition="outside")
+                style_fig(fig)
                 fig.update_layout(
-                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                    font_color="#e8ecf0", coloraxis_showscale=False,
+                    coloraxis_showscale=False,
                     height=max(300, len(wc_sorted) * 45),
-                    margin=dict(l=10, r=60, t=10, b=10),
-                    xaxis=dict(showgrid=False), yaxis=dict(tickfont=dict(size=12)),
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
@@ -1581,9 +1469,7 @@ if layer_logistics and logistics_cached is not None:
             display_df     = df_l[df_l["Type"].isin(priority_types)] if show_priority else df_l
 
             def highlight_priority(row):
-                if row["Type"] in priority_types:
-                    return ["background-color: rgba(0,229,160,0.08)"] * len(row)
-                return [""] * len(row)
+                return match_row(row, condition=row["Type"] in priority_types)
 
             st.dataframe(
                 display_df[display_cols].style.apply(highlight_priority, axis=1),
@@ -1604,11 +1490,8 @@ if layer_logistics and logistics_cached is not None:
             fig = px.bar(type_counts, x="Count", y="Type", orientation="h",
                          text="Count", color="Type", color_discrete_sequence=bar_colors)
             fig.update_traces(textposition="outside", showlegend=False)
+            style_fig(fig)
             fig.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                font_color="#e8ecf0",
                 height=max(300, len(type_counts) * 40),
-                margin=dict(l=10, r=60, t=10, b=10),
-                xaxis=dict(showgrid=False), yaxis=dict(showgrid=False, title=""),
             )
             st.plotly_chart(fig, use_container_width=True)

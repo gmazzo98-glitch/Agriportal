@@ -22,6 +22,8 @@ from core.greenhouse_calculate import calculate_greenhouse
 from core.greenhouse_data_tables import GREENHOUSE_CROPS, POLYTUNNEL_CROPS, FISH_SPECIES, CROP_NUTRIENT_DEMAND, COUPLING_PARAMS
 from core.aquaponics_calculate import calculate_aquaponics, calculate_fish, COUNTRY_AMBIENT_TEMP
 from core.data_tables import COUNTRIES, CROPS, LIGHTS
+from core._charts import style_fig
+from core._tables import severity_cell, MATCH
 from core.climate import fetch_climate_profile, compute_natural_dli_fraction
 from core.energy_labour import get_rates_for_country_name, get_full_rates
 from core._styles import inject_styles
@@ -29,6 +31,11 @@ from core.auth import require_login, current_user
 from core.farm_context import render_farm_context_sidebar, load_farm, clear_farm, MODALITY_RADIO
 import json
 from supabase import create_client, Client
+import openpyxl
+from openpyxl.styles import (
+    Font, PatternFill, Alignment, Border, Side, numbers
+)
+from openpyxl.utils import get_column_letter
 
 @st.cache_resource
 def get_supabase() -> Client:
@@ -611,12 +618,24 @@ def _build_feasibility_pdf(
         E.append(P(f"CEA FEASIBILITY ASSESSMENT  ·  {ML.upper()}", Seyebrow))
         E.append(Spacer(1,2*mm))
         # Title
-        _crop   = inputs_dict.get("crop") or inputs_dict.get("plant_crop","—")
+        _crop_name_from_inputs = inputs_dict.get("crop") or inputs_dict.get("plant_crop","—")
+        _crop_mix_json_raw = inputs_dict.get("crop_mix_json")
+        _primary_crop_for_display = None
+        if _crop_mix_json_raw:
+            try:
+                _parsed_mix = json.loads(_crop_mix_json_raw) if isinstance(_crop_mix_json_raw, str) else _crop_mix_json_raw
+                if isinstance(_parsed_mix, list) and _parsed_mix:
+                    _primary_crop_for_display = _parsed_mix[0]["crop"]
+            except Exception:
+                pass
+
+        _crop_display_name = _primary_crop_for_display or _crop_name_from_inputs
+
         if IS_AQ:
-            E.append(P(f'<b>{_crop}</b>  <font color="#2f5d3a"><i>×</i></font>  <b>{F_SPECIES}</b>',
+            E.append(P(f'<b>{_crop_display_name}</b>  <font color="#2f5d3a"><i>×</i></font>  <b>{F_SPECIES}</b>',
                        ps("ti2",24,SANS_B,INK,sa=3,lm=1.05)))
         else:
-            E.append(P(f"<b>{_crop}</b>", Stitle))
+            E.append(P(f"<b>{_crop_display_name}</b>", Stitle))
         # Subline
         _fp = inputs_dict.get("footprint") or inputs_dict.get("plant_footprint",0)
         _parts = [inputs_dict.get("country","—"), f"{int(_fp):,} m² plant area"]
@@ -2039,6 +2058,17 @@ if modality == "🏭 Indoor Vertical Farm":
         loan_term_years     = st.number_input("Loan Term (years)",
                                               value=st.session_state["roi_loan_term_years"],
                                               step=1, min_value=1, key="roi_loan_term_years")
+
+    _multi_crop_mode = st.session_state.get("roi_multi_crop", False)
+    _crop_mix        = st.session_state.get("roi_crop_mix", [])
+
+    # Sanitise locally — only keep crops valid in VF CROPS dict
+    _crop_mix  = [row for row in _crop_mix if row.get("crop") in CROPS]
+    if not _crop_mix:
+        _multi_crop_mode = False
+
+    _mix_total       = sum(row["pct"] for row in _crop_mix)
+    _mix_valid       = _multi_crop_mode and len(_crop_mix) > 0 and _mix_total == 100
     
     # ── Run calculation ───────────────────────────────────────────────────────────
     inputs = {
@@ -2065,6 +2095,7 @@ if modality == "🏭 Indoor Vertical Farm":
         "interest_rate":     interest_rate_input,
         "loan_term_years":   loan_term_years,
         "discount_rate":     8.0,
+        "crop_mix_json":     json.dumps(_crop_mix) if _mix_valid else None,
     }
     
     def run_multicrop(base_inputs: dict, crop_mix: list) -> dict:
@@ -2082,18 +2113,6 @@ if modality == "🏭 Indoor Vertical Farm":
         inputs["crop"] = list(CROPS.keys())[0]
     if not inputs.get("country") or inputs["country"] not in COUNTRIES:
         inputs["country"] = "Germany"
-
-    _multi_crop_mode = st.session_state.get("roi_multi_crop", False)
-    _crop_mix        = st.session_state.get("roi_crop_mix", [])
-
-    # Sanitise locally — only keep crops valid in VF CROPS dict
-    # Do NOT write back to session state here (widget already rendered)
-    _crop_mix  = [row for row in _crop_mix if row.get("crop") in CROPS]
-    if not _crop_mix:
-        _multi_crop_mode = False
-
-    _mix_total       = sum(row["pct"] for row in _crop_mix)
-    _mix_valid       = _multi_crop_mode and len(_crop_mix) > 0 and _mix_total == 100
 
     if _multi_crop_mode and not _mix_valid:
         st.warning("⚠️ Fix crop allocation (must sum to 100%) before results are shown.")
@@ -2217,19 +2236,777 @@ if modality == "🏭 Indoor Vertical Farm":
         return _build_feasibility_pdf(r, inputs, "vf", farm_name=_fn,
                                       run_sens_fn=_vf_sens)
 
+    # ── Excel Report Generator ────────────────────────────────────────────────
+    def generate_excel_report(inputs: dict, r: dict) -> bytes:
+        """
+        Build an investment-grade Excel workbook from the VF model results.
+        Sheets: Cover | Dashboard | Inputs | P&L | CAPEX & Debt | DCF
+        Returns raw bytes for st.download_button.
+        """
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
+        from openpyxl.utils import get_column_letter
+
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)  # remove default sheet
+
+        # ── Colour palette ────────────────────────────────────────────────────
+        C_SAGE       = "2F5D3A"
+        C_SAGE_LIGHT = "E6EDE4"
+        C_LINEN      = "F4F1EA"
+        C_LINEN2     = "FBF9F4"
+        C_INK        = "161A16"
+        C_INK2       = "4A524A"
+        C_INK3       = "7A807A"
+        C_RULE       = "D6D2C4"
+        C_AMBER      = "C08A2E"
+        C_CLAY       = "B85C38"
+        C_WHITE      = "FFFFFF"
+        C_RED_LIGHT  = "FDF0EA"
+        C_GREEN_LIGHT= "E6EDE4"
+        C_AMBER_LIGHT= "FDF6E3"
+
+        _today      = date.today()
+        _date_str   = _today.strftime("%d %B %Y")
+        _farm_name  = st.session_state.get("active_farm", {}).get("name", "—")
+        _modality   = "Indoor Vertical Farm"
+        # Determine the primary crop name for the report
+        _multi_crop_mode_excel = st.session_state.get("roi_multi_crop", False)
+        _crop_mix_excel = st.session_state.get("roi_crop_mix", [])
+        if _multi_crop_mode_excel and _crop_mix_excel:
+            _crop = _crop_mix_excel[0]["crop"]
+        else:
+            _crop = inputs.get("crop", "—")
+
+        _country    = inputs.get("country", "—")
+        _doc_id     = f"XLS-VF-{_today.strftime('%Y%m%d')}"
+
+        # ── Helper styles ─────────────────────────────────────────────────────
+        def _font(bold=False, size=10, color=C_INK, italic=False, name="Calibri"):
+            return Font(name=name, bold=bold, size=size, color=color, italic=italic)
+
+        def _fill(hex_color):
+            return PatternFill("solid", fgColor=hex_color)
+
+        def _align(h="left", v="center", wrap=False):
+            return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+
+        def _border(style="thin", color=C_RULE):
+            s = Side(style=style, color=color)
+            return Border(left=s, right=s, top=s, bottom=s)
+
+        def _bottom_border(style="thin", color=C_INK2):
+            s = Side(style=style, color=color)
+            return Border(bottom=s)
+
+        def _set_col_width(ws, col_letter, width):
+            ws.column_dimensions[col_letter].width = width
+
+        def _hdr(ws, row, col, value, bg=C_SAGE, fg=C_WHITE, size=10, bold=True,
+                 align="left", merge_to=None, italic=False):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.font      = _font(bold=bold, size=size, color=fg, italic=italic)
+            cell.fill      = _fill(bg)
+            cell.alignment = _align(h=align, v="center")
+            if merge_to:
+                ws.merge_cells(
+                    start_row=row, start_column=col,
+                    end_row=row,   end_column=merge_to
+                )
+            return cell
+
+        def _cell(ws, row, col, value, bold=False, size=10, color=C_INK,
+                  align="left", bg=None, fmt=None, italic=False):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.font      = _font(bold=bold, size=size, color=color, italic=italic)
+            cell.alignment = _align(h=align, v="center")
+            if bg:
+                cell.fill = _fill(bg)
+            if fmt:
+                cell.number_format = fmt
+            return cell
+
+        def _num(ws, row, col, value, bold=False, color=C_INK, bg=None,
+                 fmt='#,##0', negative_red=False):
+            cell = ws.cell(row=row, column=col, value=value)
+            if negative_red and isinstance(value, (int, float)) and value < 0:
+                color = C_CLAY
+            cell.font          = _font(bold=bold, size=10, color=color, name="Consolas")
+            cell.alignment     = _align(h="right", v="center")
+            cell.number_format = fmt
+            if bg:
+                cell.fill = _fill(bg)
+            return cell
+
+        def _section_hdr(ws, row, col_from, col_to, label):
+            """Sage section separator row."""
+            ws.row_dimensions[row].height = 18
+            for c in range(col_from, col_to + 1):
+                ws.cell(row=row, column=c).fill = _fill(C_SAGE_LIGHT)
+            cell = ws.cell(row=row, column=col_from, value=label.upper())
+            cell.font      = _font(bold=True, size=9, color=C_SAGE)
+            cell.alignment = _align(h="left", v="center")
+            ws.merge_cells(start_row=row, start_column=col_from,
+                           end_row=row, end_column=col_to)
+
+        def _divider(ws, row, col_from, col_to):
+            for c in range(col_from, col_to + 1):
+                ws.cell(row=row, column=c).border = _bottom_border(color=C_RULE)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SHEET 1 — COVER
+        # ══════════════════════════════════════════════════════════════════════
+        ws_cov = wb.create_sheet("Cover")
+        ws_cov.sheet_view.showGridLines = False
+        _set_col_width(ws_cov, "A", 2)
+        _set_col_width(ws_cov, "B", 28)
+        _set_col_width(ws_cov, "C", 40)
+        _set_col_width(ws_cov, "D", 20)
+        _set_col_width(ws_cov, "E", 2)
+
+        # Sage accent column
+        for r_idx in range(1, 50):
+            ws_cov.cell(row=r_idx, column=1).fill = _fill(C_SAGE)
+            ws_cov.row_dimensions[r_idx].height = 16
+
+        # Title block (rows 3-8)
+        ws_cov.row_dimensions[3].height = 10
+        ws_cov.row_dimensions[4].height = 36
+        ws_cov.row_dimensions[5].height = 20
+        ws_cov.row_dimensions[6].height = 14
+        ws_cov.row_dimensions[7].height = 14
+        ws_cov.row_dimensions[8].height = 20
+
+        _cell(ws_cov, 4, 2, "CEA FEASIBILITY MODEL", bold=True, size=22,
+              color=C_INK, align="left")
+        ws_cov.merge_cells("B4:D4")
+
+        _cell(ws_cov, 5, 2, _modality, bold=False, size=13, color=C_SAGE, align="left")
+        ws_cov.merge_cells("B5:D5")
+
+        _cell(ws_cov, 6, 2, f"Farm: {_farm_name}", size=10, color=C_INK2, italic=True)
+        ws_cov.merge_cells("B6:D6")
+        _cell(ws_cov, 7, 2, f"Crop: {_crop}  ·  Country: {_country}", size=10, color=C_INK2, italic=True)
+        ws_cov.merge_cells("B7:D7")
+
+        # Separator
+        for c in range(2, 5):
+            ws_cov.cell(row=9, column=c).fill = _fill(C_SAGE)
+        ws_cov.row_dimensions[9].height = 3
+
+        # Metadata table (rows 11-18)
+        meta = [
+            ("Document ID",    _doc_id),
+            ("Report Date",    _date_str),
+            ("Modality",       _modality),
+            ("Farm",           _farm_name),
+            ("Primary Crop",   _crop),
+            ("Country",        _country),
+            ("Currency",       "USD ($)"),
+            ("Model Version",  "AgriPortal V2"),
+        ]
+        for i, (k, v) in enumerate(meta):
+            row = 11 + i
+            ws_cov.row_dimensions[row].height = 16
+            _cell(ws_cov, row, 2, k, bold=True, size=9, color=C_INK2)
+            _cell(ws_cov, row, 3, v, size=10, color=C_INK)
+
+        # Disclaimer block (rows 22-28)
+        ws_cov.row_dimensions[22].height = 14
+        _cell(ws_cov, 22, 2, "DISCLAIMER", bold=True, size=9, color=C_CLAY)
+        disclaimer = (
+            "This workbook is generated by the Agricultural Intelligence Portal and is "
+            "intended for indicative feasibility analysis only. All figures are model outputs "
+            "based on the assumptions and parameters entered by the user. This document does "
+            "not constitute investment advice, a prospectus, or a financial projection for "
+            "fundraising purposes. Independent technical, financial, and legal due diligence "
+            "is required before making any investment decision."
+        )
+        dc = ws_cov.cell(row=23, column=2, value=disclaimer)
+        dc.font      = _font(size=9, color=C_INK3, italic=True)
+        dc.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+        ws_cov.merge_cells("B23:D28")
+        ws_cov.row_dimensions[23].height = 72
+
+        # Sheet index (rows 32 onward)
+        _cell(ws_cov, 32, 2, "WORKBOOK CONTENTS", bold=True, size=9, color=C_INK2)
+        sheets_index = [
+            ("Dashboard",    "Executive KPI summary — key metrics at a glance"),
+            ("Inputs",       "All model parameters as entered (audit trail)"),
+            ("P&L",          "Annual profit & loss statement, cost structure"),
+            ("CAPEX & Debt", "Capital expenditure breakdown and debt schedule"),
+            ("DCF",          "10-year discounted cash flow and IRR"),
+        ]
+        for i, (sname, sdesc) in enumerate(sheets_index):
+            row = 34 + i
+            ws_cov.row_dimensions[row].height = 15
+            _cell(ws_cov, row, 2, sname, bold=True, size=9, color=C_SAGE)
+            _cell(ws_cov, row, 3, sdesc, size=9, color=C_INK2)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SHEET 2 — DASHBOARD
+        # ══════════════════════════════════════════════════════════════════════
+        ws_db = wb.create_sheet("Dashboard")
+        ws_db.sheet_view.showGridLines = False
+        for col, w in zip("ABCDEFGH", [2, 22, 18, 18, 18, 18, 18, 2]):
+            _set_col_width(ws_db, col, w)
+
+        # Accent column
+        for r_idx in range(1, 60):
+            ws_db.cell(row=r_idx, column=1).fill = _fill(C_SAGE)
+            ws_db.row_dimensions[r_idx].height = 16
+
+        # Title
+        ws_db.row_dimensions[3].height = 28
+        _cell(ws_db, 3, 2, "EXECUTIVE DASHBOARD", bold=True, size=16, color=C_INK)
+        ws_db.merge_cells("B3:G3")
+        ws_db.row_dimensions[4].height = 14
+        _cell(ws_db, 4, 2, f"{_farm_name}  ·  {_crop}  ·  {_country}  ·  {_date_str}",
+              size=9, color=C_INK3, italic=True)
+        ws_db.merge_cells("B4:G4")
+
+        # Viability signal
+        _energy_pct = r.get("annual_energy_cost", 0) / r.get("annual_revenue", 1) * 100 if r.get("annual_revenue") else 0
+        if _energy_pct > 60:
+            _viab_label = "STRUCTURALLY CHALLENGED"
+            _viab_bg    = C_CLAY
+        elif _energy_pct > 35:
+            _viab_label = "MARGINAL — REVIEW ASSUMPTIONS"
+            _viab_bg    = C_AMBER
+        else:
+            _viab_label = "VIABLE"
+            _viab_bg    = C_SAGE
+
+        ws_db.row_dimensions[6].height = 20
+        vc = ws_db.cell(row=6, column=2,
+                        value=f"Viability Signal: {_viab_label}  |  Energy = {_energy_pct:.1f}% of Revenue")
+        vc.font      = _font(bold=True, size=10, color=C_WHITE)
+        vc.fill      = _fill(_viab_bg)
+        vc.alignment = _align(h="center", v="center")
+        ws_db.merge_cells("B6:G6")
+
+        # KPI tiles — row 8-10 (Revenue, EBITDA, EBITDA Margin, CAPEX)
+        #            row 12-14 (Payback, DSCR, Energy%, NPV)
+        def _kpi_block(ws, start_row, start_col, label, value_str, sub=""):
+            ws.row_dimensions[start_row].height   = 13
+            ws.row_dimensions[start_row+1].height = 28
+            ws.row_dimensions[start_row+2].height = 13
+            lc = ws.cell(row=start_row, column=start_col, value=label.upper())
+            lc.font      = _font(size=7.5, color=C_INK3, bold=True, name="Consolas")
+            lc.alignment = _align(h="center")
+            lc.fill      = _fill(C_LINEN2)
+            vc2 = ws.cell(row=start_row+1, column=start_col, value=value_str)
+            vc2.font      = _font(size=18, bold=True, color=C_INK, name="Consolas")
+            vc2.alignment = _align(h="center")
+            vc2.fill      = _fill(C_LINEN2)
+            sc = ws.cell(row=start_row+2, column=start_col, value=sub)
+            sc.font      = _font(size=7.5, color=C_INK3)
+            sc.alignment = _align(h="center")
+            sc.fill      = _fill(C_LINEN2)
+            for r2 in range(start_row, start_row+3):
+                ws.cell(row=r2, column=start_col).border = _border(color=C_RULE)
+
+        _payback_str = f"{r['payback_years']:.1f} yrs" if r.get("payback_years") else "N/A"
+        _dscr_str    = f"{r['dscr']:.2f}×" if r.get("dscr") else "N/A"
+        _npv_val     = r.get("npv", 0)
+
+        kpis_r1 = [
+            ("Annual Revenue",  f"${r.get('annual_revenue',0)/1e3:.0f}K",    "total farm revenue"),
+            ("EBITDA",          f"${r.get('ebitda',0)/1e3:.0f}K",           "earnings before int/tax/d&a"),
+            ("EBITDA Margin",   f"{r.get('ebitda_margin',0)*100:.1f}%",      "ebitda / revenue"),
+            ("Total CAPEX",     f"${r.get('total_capex',0)/1e3:.0f}K",      "total capital expenditure"),
+            ("Payback Period",  _payback_str,                                "years to recover equity"),
+            ("DSCR",            _dscr_str,                                   "debt service coverage ratio"),
+        ]
+        for i, (lbl, val, sub) in enumerate(kpis_r1):
+            _kpi_block(ws_db, 8, 2 + i, lbl, val, sub)
+
+        # Row 2 of KPIs
+        kpis_r2 = [
+            ("Energy % Rev",    f"{_energy_pct:.1f}%",                       "key viability indicator"),
+            ("NPV (10yr)",      f"${_npv_val/1e3:.0f}K",                    "net present value"),
+            ("Annual kg",       f"{r.get('total_annual_kg',0):,.0f}",        "total production"),
+            ("Price ($/kg)",    f"${r.get('effective_price',0):.2f}",        "effective selling price"),
+            ("Grow Area (m²)",  f"{r.get('effective_grow_area',0):,.0f}",    "net canopy area"),
+            ("Cycles/yr",       f"{r.get('cycles_per_year',0):.1f}",         "production cycles per year"),
+        ]
+        for i, (lbl, val, sub) in enumerate(kpis_r2):
+            _kpi_block(ws_db, 13, 2 + i, lbl, val, sub)
+
+        # Cost structure summary (rows 18 onward)
+        ws_db.row_dimensions[18].height = 6
+        _section_hdr(ws_db, 19, 2, 7, "Annual Cost Structure")
+        ws_db.row_dimensions[20].height = 14
+
+        cost_items = [
+            ("Energy",      r.get("annual_energy_cost",   0)),
+            ("Labour",      r.get("annual_labour_cost",   0)),
+            ("Nutrients/Var",r.get("annual_variable_cost", 0)),
+            ("Water",       r.get("annual_water_cost",    0)),
+            ("Maintenance", r.get("annual_maintenance",   0)),
+            ("Rent",        r.get("annual_rent",          0)),
+        ]
+        _hdr(ws_db, 20, 2, "Cost Item",   bg=C_LINEN, fg=C_INK2, size=9, bold=True)
+        _hdr(ws_db, 20, 3, "Annual ($)",  bg=C_LINEN, fg=C_INK2, size=9, bold=True, align="right")
+        _hdr(ws_db, 20, 4, "% of Revenue",bg=C_LINEN, fg=C_INK2, size=9, bold=True, align="right")
+        _hdr(ws_db, 20, 5, "% of Total Costs",bg=C_LINEN,fg=C_INK2,size=9,bold=True,align="right")
+        ws_db.merge_cells("E20:G20")
+
+        _rev  = r.get("annual_revenue", 1) or 1
+        _tcost= r.get("total_annual_costs", 1) or 1
+        for i, (name, val) in enumerate(cost_items):
+            row = 21 + i
+            ws_db.row_dimensions[row].height = 15
+            bg = C_LINEN2 if i % 2 == 0 else C_WHITE
+            _cell(ws_db, row, 2, name, size=9, bg=bg)
+            _num( ws_db, row, 3, val,  bg=bg, fmt='$#,##0')
+            _num( ws_db, row, 4, val/_rev*100,  bg=bg, fmt='0.0"%"')
+            _num( ws_db, row, 5, val/_tcost*100,bg=bg, fmt='0.0"%"')
+            ws_db.merge_cells(f"E{row}:G{row}")
+
+        # Total row
+        row = 21 + len(cost_items)
+        ws_db.row_dimensions[row].height = 16
+        _cell(ws_db, row, 2, "TOTAL COSTS", bold=True, size=9, bg=C_LINEN)
+        _num( ws_db, row, 3, r.get("total_annual_costs",0), bold=True, bg=C_LINEN, fmt='$#,##0')
+        _num( ws_db, row, 4, r.get("total_annual_costs",0)/_rev*100, bold=True, bg=C_LINEN, fmt='0.0"%"')
+        _cell(ws_db, row, 5, "", bg=C_LINEN)
+        ws_db.merge_cells(f"E{row}:G{row}")
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SHEET 3 — INPUTS (audit trail)
+        # ══════════════════════════════════════════════════════════════════════
+        ws_inp = wb.create_sheet("Inputs")
+        ws_inp.sheet_view.showGridLines = False
+        for col, w in zip("ABCD", [2, 36, 22, 20]):
+            _set_col_width(ws_inp, col, w)
+        for r_idx in range(1, 80):
+            ws_inp.cell(row=r_idx, column=1).fill = _fill(C_SAGE)
+            ws_inp.row_dimensions[r_idx].height = 15
+
+        ws_inp.row_dimensions[3].height = 24
+        _cell(ws_inp, 3, 2, "MODEL INPUTS — AUDIT TRAIL", bold=True, size=14, color=C_INK)
+        ws_inp.merge_cells("B3:D3")
+        _cell(ws_inp, 4, 2, f"Snapshot: {_date_str}  ·  {_doc_id}", size=9, color=C_INK3, italic=True)
+        ws_inp.merge_cells("B4:D4")
+
+        _hdr(ws_inp, 6, 2, "Parameter", bg=C_SAGE, fg=C_WHITE, size=9)
+        _hdr(ws_inp, 6, 3, "Value",     bg=C_SAGE, fg=C_WHITE, size=9, align="right")
+        _hdr(ws_inp, 6, 4, "Unit / Note", bg=C_SAGE, fg=C_WHITE, size=9)
+
+        _inp_rows = [
+            ("FARM CONFIGURATION", None, None),
+            ("Country",              inputs.get("country"),          "—"),
+            ("Primary Crop",         inputs.get("crop"),             "—"),
+            ("Total Footprint",      inputs.get("footprint"),        "m²"),
+            ("Stacking Levels",      inputs.get("levels"),           "—"),
+            ("LED Lights Tier",      inputs.get("lights_tier"),      "—"),
+            ("HVAC Tier",            inputs.get("hvac"),             "—"),
+            ("Automation Level",     inputs.get("automation"),       "Low / Medium / High"),
+            ("Harvest Mode",         inputs.get("harvest_mode"),     "Single / Continuous"),
+            ("PRODUCTION PARAMETERS", None, None),
+            ("Net Grow Factor",      inputs.get("net_grow_factor"),  "% of gross area"),
+            ("Walkways Factor",      inputs.get("walkways_factor"),  "% deducted"),
+            ("Loss Rate",            inputs.get("loss_rate"),        "%"),
+            ("Price Scenario",       inputs.get("price_scenario"),   "base / high / custom"),
+            ("Price Override",       inputs.get("price_override"),   "$/kg (0 = auto)"),
+            ("Packaging Cost",       inputs.get("packaging_cost"),   "$/kg"),
+            ("Water Price",          inputs.get("water_price"),      "$/m³"),
+            ("FINANCIAL STRUCTURE", None, None),
+            ("Monthly Rent",         inputs.get("rent_monthly"),     "$/month"),
+            ("Real Estate CAPEX",    inputs.get("real_estate_capex"),"$"),
+            ("Depreciation Period",  inputs.get("depreciation_years"),"years"),
+            ("Tax Rate",             inputs.get("tax_rate"),         "%"),
+            ("LTV (Loan-to-Value)",  inputs.get("ltv"),              "%"),
+            ("Interest Rate",        inputs.get("interest_rate"),    "%"),
+            ("Loan Term",            inputs.get("loan_term_years"),  "years"),
+            ("Discount Rate (DCF)",  inputs.get("discount_rate", 8.0), "%"),
+        ]
+
+        data_row = 7
+        for param, val, unit in _inp_rows:
+            if unit is None:
+                # Section header
+                _section_hdr(ws_inp, data_row, 2, 4, param)
+            else:
+                bg = C_LINEN2 if data_row % 2 == 0 else C_WHITE
+                _cell(ws_inp, data_row, 2, param, size=9, bg=bg)
+                if isinstance(val, float) and val == int(val):
+                    val = int(val)
+                _cell(ws_inp, data_row, 3, str(val) if val is not None else "—",
+                      size=9, bg=bg, align="right")
+                _cell(ws_inp, data_row, 4, unit, size=9, color=C_INK3, bg=bg, italic=True)
+            data_row += 1
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SHEET 4 — P&L
+        # ══════════════════════════════════════════════════════════════════════
+        ws_pl = wb.create_sheet("P&L")
+        ws_pl.sheet_view.showGridLines = False
+        for col, w in zip("ABCDE", [2, 38, 20, 20, 2]):
+            _set_col_width(ws_pl, col, w)
+        for r_idx in range(1, 65):
+            ws_pl.cell(row=r_idx, column=1).fill = _fill(C_SAGE)
+            ws_pl.row_dimensions[r_idx].height = 15
+
+        ws_pl.row_dimensions[3].height = 24
+        _cell(ws_pl, 3, 2, "ANNUAL PROFIT & LOSS STATEMENT", bold=True, size=14, color=C_INK)
+        ws_pl.merge_cells("B3:D3")
+        _cell(ws_pl, 4, 2, f"{_farm_name}  ·  Year 1 Steady-State  ·  {_date_str}", size=9, color=C_INK3, italic=True)
+        ws_pl.merge_cells("B4:D4")
+
+        _hdr(ws_pl, 6, 2, "Line Item",      bg=C_SAGE, fg=C_WHITE, size=9)
+        _hdr(ws_pl, 6, 3, "Annual ($)",     bg=C_SAGE, fg=C_WHITE, size=9, align="right")
+        _hdr(ws_pl, 6, 4, "% of Revenue",   bg=C_SAGE, fg=C_WHITE, size=9, align="right")
+
+        _rev2  = r.get("annual_revenue", 0) or 1
+        _pl_rows = [
+            # (label, value, bold, is_section, bg_override, note)
+            ("REVENUE",                           None,  True,  True,  C_SAGE_LIGHT, None),
+            ("Gross Revenue",                     _rev2, False, False, None, None),
+            ("Less: Post-harvest Loss",           -(_rev2 * inputs.get("loss_rate",5)/100), False, False, None, f"{inputs.get('loss_rate',5):.1f}% of gross revenue"),
+            ("Net Revenue",                       r.get("annual_revenue",0), True, False, C_LINEN, None),
+            ("",                                  None,  False, False, None, None),
+            ("OPERATING COSTS",                   None,  True,  True,  C_SAGE_LIGHT, None),
+            ("Energy",                            r.get("annual_energy_cost",0),   False, False, None, None),
+            ("Labour",                            r.get("annual_labour_cost",0),   False, False, None, None),
+            ("Nutrients & Variable Costs",        r.get("annual_variable_cost",0), False, False, None, None),
+            ("Water",                             r.get("annual_water_cost",0),    False, False, None, None),
+            ("Maintenance",                       r.get("annual_maintenance",0),   False, False, None, None),
+            ("Rent",                              r.get("annual_rent",0),          False, False, None, None),
+            ("Total Operating Costs",             r.get("total_annual_costs",0),   True,  False, C_LINEN, None),
+            ("",                                  None,  False, False, None, None),
+            ("EBITDA",                            r.get("ebitda",0),               True,  True,  C_SAGE_LIGHT, None),
+            ("",                                  None,  False, False, None, None),
+            ("NON-CASH & FINANCING",              None,  True,  True,  C_SAGE_LIGHT, None),
+            ("Depreciation & Amortisation",       -r.get("annual_depreciation",0), False, False, None, None),
+            ("EBIT (Operating Income)",           r.get("ebit",0),                 True,  False, C_LINEN, None),
+            ("Interest Expense",                  -(r.get("annual_debt_service",0) - r.get("annual_depreciation",0) * 0), False, False, None, "approx. — see CAPEX & Debt for schedule"),
+            ("EBT (Pre-Tax Income)",              r.get("ebit",0),                 True,  False, C_LINEN, None),
+            ("Income Tax",                        -r.get("tax_charge",0),          False, False, None, f"{inputs.get('tax_rate',25):.0f}% of EBT"),
+            ("NET INCOME",                        r.get("net_income",0),           True,  True,  C_SAGE_LIGHT if r.get("net_income",0)>=0 else C_RED_LIGHT, None),
+        ]
+
+        pl_row = 7
+        for lbl, val, bold, is_sect, bg_ov, note in _pl_rows:
+            ws_pl.row_dimensions[pl_row].height = 15 if not is_sect else 17
+            if lbl == "":
+                pl_row += 1
+                continue
+            if is_sect and val is None:
+                # Section header row
+                bg = bg_ov or C_SAGE_LIGHT
+                lc2 = ws_pl.cell(row=pl_row, column=2, value=lbl)
+                lc2.font      = _font(bold=True, size=9, color=C_SAGE)
+                lc2.fill      = _fill(bg)
+                lc2.alignment = _align(h="left")
+                ws_pl.cell(row=pl_row, column=3).fill = _fill(bg)
+                ws_pl.cell(row=pl_row, column=4).fill = _fill(bg)
+                pl_row += 1
+                continue
+
+            bg = bg_ov or (C_LINEN2 if pl_row % 2 == 0 else C_WHITE)
+            color = C_CLAY if (isinstance(val, (int,float)) and val < 0) else C_INK
+
+            _cell(ws_pl, pl_row, 2, lbl, bold=bold, size=9, bg=bg, color=C_INK)
+            if val is not None:
+                nc = ws_pl.cell(row=pl_row, column=3, value=round(val, 0))
+                nc.font          = _font(bold=bold, size=10, color=color, name="Consolas")
+                nc.alignment     = _align(h="right", v="center")
+                nc.number_format = '$#,##0;[Red]-$#,##0'
+                nc.fill          = _fill(bg)
+
+                pct_val = val / _rev2 * 100 if _rev2 else 0
+                pc = ws_pl.cell(row=pl_row, column=4, value=round(pct_val, 1))
+                pc.font          = _font(size=9, color=C_INK3, name="Consolas")
+                pc.alignment     = _align(h="right")
+                pc.number_format = '0.0"%"'
+                pc.fill          = _fill(bg)
+            else:
+                ws_pl.cell(row=pl_row, column=3).fill = _fill(bg)
+                ws_pl.cell(row=pl_row, column=4).fill = _fill(bg)
+
+            if note:
+                _cell(ws_pl, pl_row, 4, f"  {note}", size=8, color=C_INK3, italic=True, bg=bg)
+
+            pl_row += 1
+
+        # Unit economics block
+        pl_row += 1
+        _section_hdr(ws_pl, pl_row, 2, 4, "Unit Economics")
+        pl_row += 1
+        _total_kg = r.get("total_annual_kg", 0) or 1
+        _ega      = r.get("effective_grow_area", 0) or 1
+        unit_rows = [
+            ("Revenue per m²",          r.get("annual_revenue",0)     / _ega,    "$/m²/yr"),
+            ("EBITDA per m²",           r.get("ebitda",0)             / _ega,    "$/m²/yr"),
+            ("Total Cost per kg",       r.get("total_annual_costs",0) / _total_kg, "$/kg"),
+            ("Energy Cost per kg",      r.get("annual_energy_cost",0) / _total_kg, "$/kg"),
+            ("Labour Cost per kg",      r.get("annual_labour_cost",0) / _total_kg, "$/kg"),
+            ("Annual Production",       r.get("total_annual_kg",0),               "kg/yr"),
+            ("kWh per kg",              r.get("total_annual_kwh",r.get("annual_kwh",0)) / _total_kg, "kWh/kg"),
+        ]
+        for lbl, val, unit in unit_rows:
+            bg = C_LINEN2 if pl_row % 2 == 0 else C_WHITE
+            _cell(ws_pl, pl_row, 2, lbl, size=9, bg=bg)
+            nc2 = ws_pl.cell(row=pl_row, column=3, value=round(val, 2))
+            nc2.font          = _font(size=10, name="Consolas")
+            nc2.alignment     = _align(h="right")
+            nc2.number_format = '#,##0.00'
+            nc2.fill          = _fill(bg)
+            _cell(ws_pl, pl_row, 4, unit, size=8, color=C_INK3, italic=True, bg=bg)
+            pl_row += 1
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SHEET 5 — CAPEX & DEBT
+        # ══════════════════════════════════════════════════════════════════════
+        ws_cx = wb.create_sheet("CAPEX & Debt")
+        ws_cx.sheet_view.showGridLines = False
+        for col, w in zip("ABCDE", [2, 32, 20, 20, 2]):
+            _set_col_width(ws_cx, col, w)
+        for r_idx in range(1, 80):
+            ws_cx.cell(row=r_idx, column=1).fill = _fill(C_SAGE)
+            ws_cx.row_dimensions[r_idx].height = 15
+
+        ws_cx.row_dimensions[3].height = 24
+        _cell(ws_cx, 3, 2, "CAPEX BREAKDOWN & DEBT SCHEDULE", bold=True, size=14, color=C_INK)
+        ws_cx.merge_cells("B3:D3")
+        _cell(ws_cx, 4, 2, f"{_farm_name}  ·  {_date_str}", size=9, color=C_INK3, italic=True)
+        ws_cx.merge_cells("B4:D4")
+
+        _hdr(ws_cx, 6, 2, "CAPEX Component",  bg=C_SAGE, fg=C_WHITE, size=9)
+        _hdr(ws_cx, 6, 3, "Amount ($)",        bg=C_SAGE, fg=C_WHITE, size=9, align="right")
+        _hdr(ws_cx, 6, 4, "% of Total CAPEX",  bg=C_SAGE, fg=C_WHITE, size=9, align="right")
+
+        _total_cx = r.get("total_capex", 0) or 1
+        capex_items = [
+            ("LED Lighting",          r.get("led_capex",0)),
+            ("HVAC",                  r.get("hvac_capex",0)),
+            ("Racking",               r.get("racks_capex",0)),
+            ("Building & Enclosure",  r.get("building_capex",0)),
+            ("Automation & Controls", r.get("automation_capex",0)),
+            ("Robotics",              r.get("robotics_capex",0)),
+            ("Electrical",            r.get("electrical_capex",0)),
+            ("Water & Irrigation",    r.get("water_capex",0)),
+            ("Installation",          r.get("installation_capex",0)),
+            ("Real Estate",           inputs.get("real_estate_capex",0)),
+        ]
+        cx_row = 7
+        for lbl, val in capex_items:
+            bg = C_LINEN2 if cx_row % 2 == 0 else C_WHITE
+            _cell(ws_cx, cx_row, 2, lbl, size=9, bg=bg)
+            nc3 = ws_cx.cell(row=cx_row, column=3, value=round(val,0))
+            nc3.font = _font(size=10, name="Consolas"); nc3.alignment = _align(h="right")
+            nc3.number_format = '$#,##0'; nc3.fill = _fill(bg)
+            pc3 = ws_cx.cell(row=cx_row, column=4, value=round(val/_total_cx*100,1))
+            pc3.font = _font(size=9, color=C_INK3, name="Consolas"); pc3.alignment = _align(h="right")
+            pc3.number_format = '0.0"%"'; pc3.fill = _fill(bg)
+            cx_row += 1
+
+        # Total CAPEX
+        _cell(ws_cx, cx_row, 2, "TOTAL CAPEX", bold=True, size=9, bg=C_LINEN)
+        nc4 = ws_cx.cell(row=cx_row, column=3, value=round(r.get("total_capex",0),0))
+        nc4.font=_font(bold=True,size=10,name="Consolas"); nc4.alignment=_align(h="right")
+        nc4.number_format='$#,##0'; nc4.fill=_fill(C_LINEN)
+        nc4b=ws_cx.cell(row=cx_row,column=4,value=100.0)
+        nc4b.font=_font(bold=True,size=9,name="Consolas"); nc4b.alignment=_align(h="right")
+        nc4b.number_format='0.0"%"'; nc4b.fill=_fill(C_LINEN)
+        cx_row += 2
+
+        # Financing summary
+        _section_hdr(ws_cx, cx_row, 2, 4, "Financing Structure")
+        cx_row += 1
+        _debt     = r.get("debt_amount", 0)
+        _equity   = r.get("equity_invested", r.get("total_capex",0) * (1 - inputs.get("ltv",0)/100))
+        _ann_ds   = r.get("annual_debt_service", 0)
+        _ann_depr = r.get("annual_depreciation", 0)
+        fin_rows = [
+            ("Total CAPEX",        r.get("total_capex",0),  "$"),
+            ("Debt (LTV)",         _debt,                   f"$  —  {inputs.get('ltv',0):.0f}% LTV"),
+            ("Equity Invested",    _equity,                 "$"),
+            ("Interest Rate",      inputs.get("interest_rate",0), "%"),
+            ("Loan Term",          inputs.get("loan_term_years",0), "years"),
+            ("Annual Debt Service",_ann_ds,                 "$/yr"),
+            ("Annual Depreciation",_ann_depr,               "$/yr  — straight-line"),
+            ("DSCR",               r.get("dscr") or 0,      "× (min 1.25 recommended)"),
+        ]
+        for lbl, val, unit in fin_rows:
+            bg = C_LINEN2 if cx_row % 2 == 0 else C_WHITE
+            _cell(ws_cx, cx_row, 2, lbl, size=9, bg=bg)
+            nf = ws_cx.cell(row=cx_row, column=3, value=round(val,2))
+            nf.font=_font(size=10,name="Consolas"); nf.alignment=_align(h="right")
+            nf.number_format='#,##0.00'; nf.fill=_fill(bg)
+            _cell(ws_cx, cx_row, 4, unit, size=8, color=C_INK3, italic=True, bg=bg)
+            cx_row += 1
+
+        # Depreciation schedule (straight-line, 10 years)
+        cx_row += 1
+        _section_hdr(ws_cx, cx_row, 2, 4, "Depreciation Schedule (Straight-Line)")
+        cx_row += 1
+        _hdr(ws_cx, cx_row, 2, "Year", bg=C_LINEN, fg=C_INK2, size=9)
+        _hdr(ws_cx, cx_row, 3, "Annual Depreciation ($)", bg=C_LINEN, fg=C_INK2, size=9, align="right")
+        _hdr(ws_cx, cx_row, 4, "Cumulative Depreciated ($)", bg=C_LINEN, fg=C_INK2, size=9, align="right")
+        cx_row += 1
+        _dep_yrs = inputs.get("depreciation_years", 10)
+        for yr in range(1, min(_dep_yrs, 10) + 1):
+            bg = C_LINEN2 if cx_row % 2 == 0 else C_WHITE
+            _cell(ws_cx, cx_row, 2, f"Year {yr}", size=9, bg=bg)
+            nd = ws_cx.cell(row=cx_row, column=3, value=round(_ann_depr,0))
+            nd.font=_font(size=10,name="Consolas"); nd.alignment=_align(h="right")
+            nd.number_format='$#,##0'; nd.fill=_fill(bg)
+            nd2 = ws_cx.cell(row=cx_row, column=4, value=round(_ann_depr*yr,0))
+            nd2.font=_font(size=10,name="Consolas"); nd2.alignment=_align(h="right")
+            nd2.number_format='$#,##0'; nd2.fill=_fill(bg)
+            cx_row += 1
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SHEET 6 — DCF
+        # ══════════════════════════════════════════════════════════════════════
+        ws_dcf = wb.create_sheet("DCF")
+        ws_dcf.sheet_view.showGridLines = False
+        dcf_cols = ["A","B","C","D","E","F","G","H","I"]
+        for col, w in zip(dcf_cols, [2, 10, 16, 16, 16, 16, 16, 16, 2]):
+            _set_col_width(ws_dcf, col, w)
+        for r_idx in range(1, 30):
+            ws_dcf.cell(row=r_idx, column=1).fill = _fill(C_SAGE)
+            ws_dcf.row_dimensions[r_idx].height = 15
+
+        ws_dcf.row_dimensions[3].height = 24
+        _cell(ws_dcf, 3, 2, "10-YEAR DISCOUNTED CASH FLOW", bold=True, size=14, color=C_INK)
+        ws_dcf.merge_cells("B3:H3")
+        _cell(ws_dcf, 4, 2,
+              f"Discount rate: {inputs.get('discount_rate',8.0):.1f}%  ·  Equity: ${_equity:,.0f}  ·  {_date_str}",
+              size=9, color=C_INK3, italic=True)
+        ws_dcf.merge_cells("B4:H4")
+
+        # Headers
+        dcf_hdrs = ["Year", "FCFE ($)", "Discount Factor", "PV of FCFE ($)", "Cumulative NPV ($)", "Revenue ($)", "EBITDA ($)"]
+        for i, lbl in enumerate(dcf_hdrs):
+            _hdr(ws_dcf, 6, 2+i, lbl, bg=C_SAGE, fg=C_WHITE, size=9,
+                 align="right" if i > 0 else "left")
+
+        # Year 0 (equity outflow)
+        ws_dcf.row_dimensions[7].height = 15
+        _cell(ws_dcf, 7, 2, "0 (Investment)", size=9, color=C_INK, bg=C_LINEN2)
+        _num(ws_dcf, 7, 3, -round(_equity,0), bg=C_LINEN2, fmt='$#,##0;[Red]-$#,##0', negative_red=True)
+        _num(ws_dcf, 7, 4, 1.000, bg=C_LINEN2, fmt='0.000')
+        _num(ws_dcf, 7, 5, -round(_equity,0), bg=C_LINEN2, fmt='$#,##0;[Red]-$#,##0', negative_red=True)
+        _num(ws_dcf, 7, 6, -round(_equity,0), bg=C_LINEN2, fmt='$#,##0;[Red]-$#,##0', negative_red=True)
+        _cell(ws_dcf, 7, 7, "—", size=9, color=C_INK3, bg=C_LINEN2, align="right")
+        _cell(ws_dcf, 7, 8, "—", size=9, color=C_INK3, bg=C_LINEN2, align="right")
+
+        _dcf_cashflows = r.get("dcf_cashflows", [])
+        for i, yr_data in enumerate(_dcf_cashflows):
+            row = 8 + i
+            ws_dcf.row_dimensions[row].height = 15
+            yr    = yr_data.get("year", i+1)
+            fcfe  = yr_data.get("fcfe", 0)
+            pv    = yr_data.get("pv", 0)
+            cum   = yr_data.get("cumulative_npv", 0)
+            _disc_rt = inputs.get("discount_rate", 8.0) / 100
+            df    = 1 / ((1 + _disc_rt) ** yr)
+
+            bg = C_LINEN2 if row % 2 == 0 else C_WHITE
+            _cum_color = C_SAGE if cum >= 0 else C_CLAY
+            _cell(ws_dcf, row, 2, f"Year {yr}", size=9, bg=bg)
+            _num(ws_dcf, row, 3, round(fcfe,0),  bg=bg, fmt='$#,##0;[Red]-$#,##0')
+            _num(ws_dcf, row, 4, round(df,4),    bg=bg, fmt='0.0000')
+            _num(ws_dcf, row, 5, round(pv,0),    bg=bg, fmt='$#,##0;[Red]-$#,##0')
+            nc_cum = ws_dcf.cell(row=row, column=6, value=round(cum,0))
+            nc_cum.font=_font(bold=(cum>=0), size=10, color=_cum_color, name="Consolas")
+            nc_cum.alignment=_align(h="right"); nc_cum.number_format='$#,##0;[Red]-$#,##0'
+            nc_cum.fill=_fill(bg)
+            _num(ws_dcf, row, 7, round(r.get("annual_revenue",0),0), bg=bg, fmt='$#,##0')
+            _num(ws_dcf, row, 8, round(r.get("ebitda",0),0),         bg=bg, fmt='$#,##0')
+
+        # Summary metrics at bottom
+        _summary_row = 8 + len(_dcf_cashflows) + 2
+        _section_hdr(ws_dcf, _summary_row, 2, 8, "Investment Return Summary")
+        _summary_row += 1
+        _npv_final = _dcf_cashflows[-1]["cumulative_npv"] if _dcf_cashflows else 0
+
+        # IRR approximation (Newton-Raphson)
+        def _calc_irr(equity, annual_fcfe, n=10):
+            try:
+                cashflows = [-equity] + [annual_fcfe] * n
+                rate = 0.1
+                for _ in range(200):
+                    npv = sum(cf / (1+rate)**t for t, cf in enumerate(cashflows))
+                    d_npv = sum(-t*cf / (1+rate)**(t+1) for t, cf in enumerate(cashflows))
+                    if abs(d_npv) < 1e-10: break
+                    rate -= npv / d_npv
+                    if rate <= -1: return None
+                return rate if 0 < rate < 10 else None
+            except Exception:
+                return None
+
+        _fcfe_val = _dcf_cashflows[0]["fcfe"] if _dcf_cashflows else r.get("ebitda",0)
+        _irr      = _calc_irr(_equity, _fcfe_val)
+
+        summary_kpis = [
+            ("NPV (10yr, equity basis)",       f"${_npv_final:,.0f}"),
+            ("IRR (approx.)",                  f"{_irr*100:.1f}%" if _irr else "N/A"),
+            ("Payback Period",                 f"{r['payback_years']:.1f} yrs" if r.get("payback_years") else "N/A"),
+            ("DSCR",                           f"{r['dscr']:.2f}×" if r.get("dscr") else "N/A"),
+            ("Equity Invested",                f"${_equity:,.0f}"),
+            ("Discount Rate",                  f"{inputs.get('discount_rate',8.0):.1f}%"),
+        ]
+        for lbl, val in summary_kpis:
+            bg = C_LINEN2 if _summary_row % 2 == 0 else C_WHITE
+            _cell(ws_dcf, _summary_row, 2, lbl, size=9, bg=bg)
+            vc3 = ws_dcf.cell(row=_summary_row, column=3, value=val)
+            vc3.font=_font(bold=True, size=10, name="Consolas"); vc3.alignment=_align(h="right")
+            vc3.fill=_fill(bg)
+            ws_dcf.merge_cells(
+                start_row=_summary_row, start_column=3,
+                end_row=_summary_row, end_column=8
+            )
+            _summary_row += 1
+
+        # ── Freeze panes & set active sheet ───────────────────────────────────
+        for ws in [ws_db, ws_inp, ws_pl, ws_cx, ws_dcf]:
+            ws.freeze_panes = ws.cell(row=7, column=2)
+
+        wb.active = ws_cov  # open on Cover
+
+        # ── Write to buffer ───────────────────────────────────────────────────
+        _buf = io.BytesIO()
+        wb.save(_buf)
+        _buf.seek(0)
+        return _buf.read()
+
     # ── Key metrics ───────────────────────────────────────────────────────────────
     # ── PDF Download Button ───────────────────────────────────────────────────
-    pdf_col1, pdf_col2 = st.columns([5, 1])
+    pdf_col1, pdf_col2, pdf_col3 = st.columns([4, 1, 1])
     with pdf_col2:
         if st.button("📄 Download PDF Report", use_container_width=True):
             with st.spinner("Generating PDF..."):
                 pdf_bytes = generate_pdf_report(inputs, r)
-                filename = f"CEA_Report_{inputs['crop'].replace(' ', '_').replace('/', '')}_{inputs['country']}_{date.today().strftime('%Y%m%d')}.pdf"
+                # Correct naming: use primary crop from mix if multi-crop is valid
+                _rep_crop = _crop_mix[0]["crop"] if _mix_valid and _crop_mix else inputs["crop"]
+                _rep_crop_safe = _rep_crop.replace(' ', '_').replace('/', '')
+                filename = f"CEA_Report_{_rep_crop_safe}_{inputs['country']}_{date.today().strftime('%Y%m%d')}.pdf"
                 st.download_button(
                     label="⬇️ Save PDF",
                     data=pdf_bytes,
                     file_name=filename,
                     mime="application/pdf",
+                    use_container_width=True,
+                )
+    with pdf_col3:
+        if st.button("📊 Download Excel Model", use_container_width=True):
+            with st.spinner("Building Excel workbook..."):
+                xl_bytes = generate_excel_report(inputs, r)
+                # Correct naming: use primary crop from mix if multi-crop is valid
+                _xl_crop = _crop_mix[0]["crop"] if _mix_valid and _crop_mix else inputs["crop"]
+                _xl_crop_safe = _xl_crop.replace(' ', '_').replace('/', '')
+                xl_filename = f"CEA_Model_{_xl_crop_safe}_{inputs['country']}_{date.today().strftime('%Y%m%d')}.xlsx"
+                st.download_button(
+                    label="⬇️ Save Excel",
+                    data=xl_bytes,
+                    file_name=xl_filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
     st.divider()
@@ -2447,6 +3224,7 @@ if modality == "🏭 Indoor Vertical Farm":
         xaxis=dict(showgrid=False),
         height=380, margin=dict(t=30, b=20),
     )
+    style_fig(fig_bridge)
     st.plotly_chart(fig_bridge, use_container_width=True)
     
     st.divider()
@@ -2472,6 +3250,7 @@ if modality == "🏭 Indoor Vertical Farm":
             plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
             font_color="#161a16", height=320, margin=dict(t=10, b=10),
         )
+        style_fig(fig_cost)
         st.plotly_chart(fig_cost, use_container_width=True)
     
     with col_capex:
@@ -2494,6 +3273,7 @@ if modality == "🏭 Indoor Vertical Farm":
             plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
             font_color="#161a16", height=320, margin=dict(t=10, b=10),
         )
+        style_fig(fig_capex)
         st.plotly_chart(fig_capex, use_container_width=True)
     
     st.divider()
@@ -2520,6 +3300,7 @@ if modality == "🏭 Indoor Vertical Farm":
         yaxis=dict(title="Cumulative NPV ($)", showgrid=False),
         margin=dict(t=10, b=10),
     )
+    style_fig(fig_dcf)
     st.plotly_chart(fig_dcf, use_container_width=True)
     
     st.divider()
@@ -2564,7 +3345,14 @@ if modality == "🏭 Indoor Vertical Farm":
         ],
     }
     
-    st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
+    def highlight_alternating_rows(row):
+        # Apply a subtle background to alternating rows for readability
+        return [MATCH if row.name % 2 == 0 else ""] * len(row)
+
+    st.dataframe(
+        pd.DataFrame(summary_data).style.apply(highlight_alternating_rows, axis=1),
+        use_container_width=True, hide_index=True,
+    )
     
     # ═════════════════════════════════════════════════════════════════════════════
     # COUNTRY & CROP COMPARISON
@@ -2660,6 +3448,7 @@ if modality == "🏭 Indoor Vertical Farm":
                 xaxis=dict(showgrid=False, zeroline=False),
                 yaxis=dict(showgrid=False, autorange="reversed"),
             )
+            style_fig(fig_countries)
             st.plotly_chart(fig_countries, use_container_width=True)
     
             # Summary note
@@ -2778,6 +3567,7 @@ if modality == "🏭 Indoor Vertical Farm":
                 xaxis=dict(showgrid=False, zeroline=False),
                 yaxis=dict(showgrid=False, autorange="reversed"),
             )
+            style_fig(fig_crops)
             st.plotly_chart(fig_crops, use_container_width=True)
     
             viable_crops = (df_crops["Energy % of Revenue"] < 40).sum()
@@ -2976,6 +3766,7 @@ if modality == "🏭 Indoor Vertical Farm":
         yaxis=dict(showgrid=False),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
+    style_fig(fig_tornado)
     st.plotly_chart(fig_tornado, use_container_width=True)
     
     # ─────────────────────────────────────────────────────────────────────────────
@@ -3123,6 +3914,7 @@ if modality == "🏭 Indoor Vertical Farm":
             yaxis=dict(showgrid=False, title="$"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
+        style_fig(fig_compare)
         st.plotly_chart(fig_compare, use_container_width=True)
     
         # Summary table
@@ -3150,20 +3942,9 @@ if modality == "🏭 Indoor Vertical Farm":
         scenario_df = pd.DataFrame(table_rows)
     
         def highlight_energy_pct(row):
-            val_str = row["Energy % of Revenue"]
-            if val_str == "N/A":
-                return [""] * len(row)
-            try:
-                val = float(val_str.replace("%", ""))
-            except ValueError:
-                return [""] * len(row)
-            if val > 60:
-                return [""] * (len(row) - 1) + ["background-color: rgba(255,77,77,0.25); color: #ff4d4d"]
-            elif val > 40:
-                return [""] * (len(row) - 1) + ["background-color: rgba(255,193,61,0.25); color: #ffc13d"]
-            else:
-                return [""] * (len(row) - 1) + ["background-color: rgba(0,229,160,0.15); color: #00e5a0"]
-    
+            style = severity_cell(row["Energy % of Revenue"], hi=60, mid=40)
+            return [style] * len(row)
+
         st.dataframe(
             scenario_df.style.apply(highlight_energy_pct, axis=1),
             use_container_width=True,
@@ -3392,6 +4173,14 @@ elif modality == "🌿 High-Tech Greenhouse":
                                                 value=st.session_state["gh_discount_rate"],
                                                 step=0.5, min_value=0.0, key="gh_discount_rate")
 
+    _gh_multi_crop_mode = st.session_state.get("gh_multi_crop", False)
+    _gh_mix             = st.session_state.get("gh_crop_mix", [])
+    # Validate all mix crops exist in current crop pool
+    _gh_crop_pool = list(GREENHOUSE_CROPS.keys()) if gh_crop_source == "Greenhouse" else list(POLYTUNNEL_CROPS.keys())
+    _gh_mix = [row for row in _gh_mix if row["crop"] in _gh_crop_pool]
+    _gh_mix_total       = sum(row["pct"] for row in _gh_mix)
+    _gh_mix_valid       = _gh_multi_crop_mode and len(_gh_mix) > 0 and _gh_mix_total == 100
+
     # ── Run calculation ───────────────────────────────────────────────────────
     gh_inputs = {
         "country":            gh_country,
@@ -3417,12 +4206,8 @@ elif modality == "🌿 High-Tech Greenhouse":
         "discount_rate":      gh_discount_rate,
         "ambient_temp_annual":    st.session_state.get("active_farm", {}).get("ambient_temp_annual"),
         "mean_annual_dli":        st.session_state.get("active_farm", {}).get("mean_annual_dli"),
+        "crop_mix_json":      json.dumps(_gh_mix) if _gh_mix_valid else None,
     }
-
-    _gh_multi_crop_mode = st.session_state.get("gh_multi_crop", False)
-    _gh_crop_mix        = st.session_state.get("gh_crop_mix", [])
-    _gh_mix_total       = sum(row["pct"] for row in _gh_crop_mix)
-    _gh_mix_valid       = _gh_multi_crop_mode and len(_gh_crop_mix) > 0 and _gh_mix_total == 100
 
     if _gh_multi_crop_mode and not _gh_mix_valid:
         st.warning("⚠️ Fix greenhouse crop allocation (must sum to 100%) before results are shown.")
@@ -3436,6 +4221,8 @@ elif modality == "🌿 High-Tech Greenhouse":
         COUNTRIES[gh_country]["kwh"] = gh_kwh_override
     if _gh_mix_valid:
         gh_r = _run_multicrop_generic(gh_inputs, _gh_crop_mix,
+                                       calculate_greenhouse, _gh_crop_data_dict)
+        gh_r = _run_multicrop_generic(gh_inputs, _gh_mix,
                                        calculate_greenhouse, _gh_crop_data_dict)
     else:
         gh_r = calculate_greenhouse(gh_inputs)
@@ -3554,7 +4341,10 @@ elif modality == "🌿 High-Tech Greenhouse":
         if st.button("📄 Download PDF Report", key="gh_pdf_btn", use_container_width=True): # Keep emoji in button
             with st.spinner("Generating PDF..."):
                 gh_pdf_bytes = generate_gh_pdf_report(gh_inputs, gh_r)
-                gh_filename = f"GH_Report_{gh_inputs['crop'].replace(' ','_').replace('/','').replace('(','').replace(')','_')}_{gh_inputs['country']}_{date.today().strftime('%Y%m%d')}.pdf"
+                # Correct naming: use primary crop from mix if multi-crop is valid
+                _gh_rep_crop = _gh_mix[0]["crop"] if _gh_mix_valid and _gh_mix else gh_inputs["crop"]
+                _gh_rep_crop_safe = _gh_rep_crop.replace(' ','_').replace('/','').replace('(','').replace(')','_')
+                gh_filename = f"GH_Report_{_gh_rep_crop_safe}_{gh_inputs['country']}_{date.today().strftime('%Y%m%d')}.pdf"
                 st.download_button(label="⬇️ Save PDF", data=gh_pdf_bytes,
                                    file_name=gh_filename, mime="application/pdf",
                                    use_container_width=True, key="gh_pdf_dl")
@@ -3771,6 +4561,7 @@ elif modality == "🌿 High-Tech Greenhouse":
         yaxis=dict(showgrid=False), xaxis=dict(showgrid=False),
         height=380, margin=dict(t=30, b=20),
     )
+    style_fig(gh_fig_bridge)
     st.plotly_chart(gh_fig_bridge, use_container_width=True)
 
     st.divider()
@@ -3791,6 +4582,7 @@ elif modality == "🌿 High-Tech Greenhouse":
             plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
             font_color="#161a16", height=320, margin=dict(t=10, b=10),
         )
+        style_fig(gh_fig_cost)
         st.plotly_chart(gh_fig_cost, use_container_width=True)
     with gh_col_capex:
         st.subheader("CAPEX Breakdown")
@@ -3805,6 +4597,7 @@ elif modality == "🌿 High-Tech Greenhouse":
             plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
             font_color="#161a16", height=320, margin=dict(t=10, b=10),
         )
+        style_fig(gh_fig_capex)
         st.plotly_chart(gh_fig_capex, use_container_width=True)
 
     st.divider()
@@ -3826,6 +4619,7 @@ elif modality == "🌿 High-Tech Greenhouse":
         yaxis=dict(title="Cumulative NPV ($)", showgrid=False),
         margin=dict(t=10, b=10),
     )
+    style_fig(gh_fig_dcf)
     st.plotly_chart(gh_fig_dcf, use_container_width=True)
 
     st.divider()
@@ -3924,6 +4718,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                 margin=dict(l=10,r=100,t=20,b=20),
                 xaxis=dict(showgrid=False,zeroline=False),
                 yaxis=dict(showgrid=False,autorange="reversed"))
+            style_fig(_gh_fig_c)
             st.plotly_chart(_gh_fig_c, use_container_width=True)
             _gh_viable_c = (_gh_df_c["Energy % of Revenue"]<40).sum()
             st.caption(f"**{_gh_viable_c} of {len(_gh_df_c)} countries** show energy below 40% of revenue for this crop and setup.")
@@ -3961,12 +4756,7 @@ elif modality == "🌿 High-Tech Greenhouse":
             _gh_brc = [_gh_crbar(r, gh_crop_metric) for _,r in _gh_df_cr.iterrows()]
             _gh_fig_cr = go.Figure(go.Bar(
                 x=_gh_df_cr[gh_crop_metric], y=_gh_df_cr["Crop"], orientation="h",
-                marker_color=_gh_brc,
-                text=_gh_df_cr[gh_crop_metric].apply(
-                    lambda v: f"${v:,.0f}" if gh_crop_metric=="EBITDA"
-                    else (f"{v:.1f}%" if "%" in gh_crop_metric
-                    else (f"{v:.1f} yrs" if v<900 else "N/A"))),
-                textposition="outside"))
+                marker_color=_gh_brc, textposition="outside"))
             if gh_crop_metric=="Energy % of Revenue":
                 _gh_fig_cr.add_vline(x=40, line_dash="dash", line_color="rgba(255,193,61,0.6)",
                                      annotation_text="40% threshold", annotation_font_color="#ffc13d")
@@ -3976,6 +4766,7 @@ elif modality == "🌿 High-Tech Greenhouse":
                 margin=dict(l=10,r=100,t=20,b=20),
                 xaxis=dict(showgrid=False,zeroline=False),
                 yaxis=dict(showgrid=False,autorange="reversed"))
+            style_fig(_gh_fig_cr)
             st.plotly_chart(_gh_fig_cr, use_container_width=True)
             _gh_viable_cr = (_gh_df_cr["Energy % of Revenue"]<40).sum()
             st.caption(f"**{_gh_viable_cr} of {len(_gh_df_cr)} crops** show energy below 40% of revenue. Normalised to Single harvest.")
@@ -4067,6 +4858,7 @@ elif modality == "🌿 High-Tech Greenhouse":
         xaxis=dict(title="EBITDA delta from base ($)",showgrid=False,zeroline=False),
         yaxis=dict(showgrid=False),
         legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1))
+    style_fig(_gh_fig_torn)
     st.plotly_chart(_gh_fig_torn, use_container_width=True)
 
     st.divider()
@@ -4131,6 +4923,7 @@ elif modality == "🌿 High-Tech Greenhouse":
             font_color="#161a16", height=420, margin=dict(t=30,b=20),
             xaxis=dict(showgrid=False), yaxis=dict(showgrid=False,title="$"),
             legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1))
+        style_fig(_gh_fig_comp)
         st.plotly_chart(_gh_fig_comp, use_container_width=True)
 
         _gh_sc_rows = []
@@ -4149,13 +4942,8 @@ elif modality == "🌿 High-Tech Greenhouse":
         _gh_sc_df = pd.DataFrame(_gh_sc_rows)
 
         def _gh_highlight_ep(row):
-            v_str = row["Energy % of Revenue"]
-            if v_str=="N/A": return [""]*len(row)
-            try: v=float(v_str.replace("%",""))
-            except: return [""]*len(row)
-            if v>60:   return [""]*( len(row)-1)+["background-color:rgba(255,77,77,0.25);color:#ff4d4d"]
-            elif v>40: return [""]*( len(row)-1)+["background-color:rgba(255,193,61,0.25);color:#ffc13d"]
-            else:      return [""]*( len(row)-1)+["background-color:rgba(0,229,160,0.15);color:#00e5a0"]
+            style = severity_cell(row["Energy % of Revenue"], hi=60, mid=40)
+            return [style] * len(row)
 
         st.dataframe(_gh_sc_df.style.apply(_gh_highlight_ep,axis=1),
                      use_container_width=True, hide_index=True)
@@ -4407,6 +5195,13 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         aq_loan_term  = st.number_input("Loan term (yrs)", value=st.session_state["aq_loan_term_years"], step=1, min_value=1, key="aq_loan_term_years")
         aq_discount   = st.number_input("Discount rate (%)", value=st.session_state["aq_discount_rate"], step=0.5, min_value=0.0, key="aq_discount_rate")
 
+    _aq_multi_crop_mode = st.session_state.get("aq_multi_crop", False)
+    _aq_mix             = st.session_state.get("aq_crop_mix", [])
+    _aq_valid_dict_early = POLYTUNNEL_CROPS if aq_plant_crop_source == "Polytunnel" else GREENHOUSE_CROPS
+    _aq_mix = [row for row in _aq_mix if row["crop"] in _aq_valid_dict_early]
+    _aq_mix_total       = sum(row["pct"] for row in _aq_mix)
+    _aq_mix_valid       = _aq_multi_crop_mode and len(_aq_mix) > 0 and _aq_mix_total == 100
+
     # ── RUN CALCULATION ───────────────────────────────────────────────────────
     if _aq_mode == "coupled" and aq_species == "Atlantic Salmon":
         st.error("Cannot run: Atlantic Salmon is incompatible with coupled aquaponics. " # Remove emoji from error message
@@ -4446,12 +5241,8 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         "target_temp_c":            aq_target_temp,
         "fish_depreciation_years":  aq_fish_dep,
         "coupled_efficiency_factor": aq_coupled_efficiency,
+        "crop_mix_json":            json.dumps(_aq_mix) if _aq_mix_valid else None,
     }
-
-    _aq_multi_crop_mode = st.session_state.get("aq_multi_crop", False)
-    _aq_crop_mix        = st.session_state.get("aq_crop_mix", [])
-    _aq_mix_total       = sum(row["pct"] for row in _aq_crop_mix)
-    _aq_mix_valid       = _aq_multi_crop_mode and len(_aq_crop_mix) > 0 and _aq_mix_total == 100
 
     if _aq_multi_crop_mode and not _aq_mix_valid:
         st.warning("⚠️ Fix plant crop allocation (must sum to 100%) before results are shown.")
@@ -4555,7 +5346,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             "mean_annual_dli":    aq_inputs.get("mean_annual_dli"),
         }
         _aq_plant_r = _run_multicrop_generic(
-            _aq_plant_base, _aq_crop_mix, calculate_greenhouse, _aq_plant_dict)
+            _aq_plant_base, _aq_mix, calculate_greenhouse, _aq_plant_dict)
         # Run fish side normally via calculate_aquaponics, extract fish result
         _aq_single_r = calculate_aquaponics(aq_inputs)
         _fr_multi     = _aq_single_r["fish"]
@@ -4775,8 +5566,11 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         if st.button("📄 Download PDF Report", key="aq_pdf_btn", use_container_width=True): # Keep emoji in button
             with st.spinner("Generating PDF..."):
                 _aq_pdf_bytes = generate_aq_pdf_report(aq_inputs, aq_r)
+                # Correct naming: use primary crop from mix if multi-crop is valid
+                _aq_rep_crop = _aq_mix[0]["crop"] if _aq_mix_valid and _aq_mix else aq_inputs.get('plant_crop','')
+                _aq_rep_crop_safe = _aq_rep_crop.replace(' ','_').replace('/','').replace('(','').replace(')','')
                 _aq_filename = (
-                    f"AQ_Report_{aq_inputs.get('plant_crop','').replace(' ','_').replace('/','').replace('(','').replace(')','')}"
+                    f"AQ_Report_{_aq_rep_crop_safe}"
                     f"_{aq_inputs.get('species','').replace(' ','_')}"
                     f"_{aq_inputs.get('country','')}_{date.today().strftime('%Y%m%d')}.pdf"
                 )
@@ -4867,6 +5661,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     _aq_fig_b.update_layout(plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
         font_color="#161a16", showlegend=False, height=380, margin=dict(t=30,b=20),
         yaxis=dict(showgrid=False), xaxis=dict(showgrid=False))
+    style_fig(_aq_fig_b)
     st.plotly_chart(_aq_fig_b, use_container_width=True)
 
     st.divider()
@@ -4883,6 +5678,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             hole=0.45, marker_colors=["#00e5a0","#26c6da","#66bb6a","#ffa726","#ab47bc","#8d6e63"]))
         _pcf.update_layout(plot_bgcolor="#ffffff",paper_bgcolor="#ffffff",
                            font_color="#161a16",height=300,margin=dict(t=10,b=10))
+        style_fig(_pcf)
         st.plotly_chart(_pcf, use_container_width=True)
     with _aq_cc2:
         st.markdown(f"**🐟 Fish CAPEX — ${_fr['total_fish_capex']:,.0f} + Integration ${aq_r['integration_capex']:,.0f}**") # Remove emoji from markdown
@@ -4893,6 +5689,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             hole=0.45, marker_colors=["#4fc3f7","#29b6f6","#0288d1","#01579b","#80d8ff"]))
         _fcf.update_layout(plot_bgcolor="#ffffff",paper_bgcolor="#ffffff",
                            font_color="#161a16",height=300,margin=dict(t=10,b=10))
+        style_fig(_fcf)
         st.plotly_chart(_fcf, use_container_width=True)
 
     st.divider()
@@ -4909,6 +5706,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     _aq_cost_fig.update_layout(
         plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
         font_color="#161a16", height=320, margin=dict(t=10, b=10))
+    style_fig(_aq_cost_fig)
     st.plotly_chart(_aq_cost_fig, use_container_width=True)
 
     st.divider()
@@ -4931,6 +5729,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             xaxis=dict(title="Year", showgrid=False),
             yaxis=dict(title="Cumulative NPV ($)", showgrid=False),
             margin=dict(t=10, b=10))
+        style_fig(_pdcf)
         st.plotly_chart(_pdcf, use_container_width=True)
 
     with _dcf_col2: # Remove emoji from markdown
@@ -4947,6 +5746,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             xaxis=dict(title="Year", showgrid=False),
             yaxis=dict(title="Cumulative NPV ($)", showgrid=False),
             margin=dict(t=10, b=10))
+        style_fig(_fdcf)
         st.plotly_chart(_fdcf, use_container_width=True)
 
     st.divider()
@@ -5067,6 +5867,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                 margin=dict(l=10,r=100,t=20,b=20),
                 xaxis=dict(showgrid=False,zeroline=False),
                 yaxis=dict(showgrid=False,autorange="reversed"))
+            style_fig(_aq_fig_c)
             st.plotly_chart(_aq_fig_c, use_container_width=True)
 
     with _aq_comp_tab2:
@@ -5128,6 +5929,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                 margin=dict(l=10,r=100,t=20,b=20),
                 xaxis=dict(showgrid=False,zeroline=False),
                 yaxis=dict(showgrid=False,autorange="reversed"))
+            style_fig(_aq_fig_cr)
             st.plotly_chart(_aq_fig_cr, use_container_width=True)
 
     st.divider()
@@ -5173,6 +5975,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         xaxis=dict(title="Plant EBITDA delta ($)",showgrid=False,zeroline=False),
         yaxis=dict(showgrid=False),
         legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1))
+    style_fig(_aq_fig_torn)
     st.plotly_chart(_aq_fig_torn, use_container_width=True)
 
     st.divider()
@@ -5234,6 +6037,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             font_color="#161a16", height=420, margin=dict(t=30,b=20),
             xaxis=dict(showgrid=False), yaxis=dict(showgrid=False,title="$"),
             legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="right",x=1))
+        style_fig(_aq_fig_comp)
         st.plotly_chart(_aq_fig_comp, use_container_width=True)
 
         _aq_sc_rows = []
@@ -5250,13 +6054,8 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             })
         _aq_sc_df = pd.DataFrame(_aq_sc_rows)
         def _aq_highlight_ep(row):
-            v_str = row["Energy % Rev"]
-            if v_str=="N/A": return [""]*len(row)
-            try: v=float(v_str.replace("%",""))
-            except: return [""]*len(row)
-            if v>60:   return [""]*( len(row)-1)+["background-color:rgba(255,77,77,0.25);color:#ff4d4d"]
-            elif v>40: return [""]*( len(row)-1)+["background-color:rgba(255,193,61,0.25);color:#ffc13d"]
-            else:      return [""]*( len(row)-1)+["background-color:rgba(0,229,160,0.15);color:#00e5a0"]
+            style = severity_cell(row["Energy % Rev"], hi=60, mid=40)
+            return [style] * len(row)
         st.dataframe(_aq_sc_df.style.apply(_aq_highlight_ep,axis=1),
                      use_container_width=True, hide_index=True)
     else:

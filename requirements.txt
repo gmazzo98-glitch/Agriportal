@@ -10,3 +10,4 @@ folium
 streamlit-folium
 reportlab
 kaleido==0.2.1
+openpyxl
