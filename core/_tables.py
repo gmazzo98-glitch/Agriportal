@@ -44,15 +44,15 @@ from __future__ import annotations
 
 # ── Cell tint strings (background wash + legible mid-tone text) ─────────────
 # Severity scale — sage (good) → wheat (caution) → terracotta (severe).
-LOW   = "background-color: rgba(79,138,91,0.18);  color:#4f8a5b; font-weight:600"   # healthy
-MED   = "background-color: rgba(181,138,50,0.20);  color:#9a7322; font-weight:600"   # caution
-HIGH  = "background-color: rgba(192,87,58,0.22);  color:#c0573a; font-weight:600"   # severe
+LOW   = "background-color: rgba(79,138,91,0.16);  color:#4f8a5b; font-weight:600"   # healthy
+MED   = "background-color: rgba(181,138,50,0.18);  color:#9a7322; font-weight:600"   # caution
+HIGH  = "background-color: rgba(192,87,58,0.20);  color:#c0573a; font-weight:600"   # severe
 
 # Subtle whole-row match — background wash only, text left to the theme ink.
-MATCH = "background-color: rgba(79,138,91,0.12)"
+MATCH = "background-color: rgba(79,138,91,0.10)"
 
 # Neutral emphasis (totals / selected) — slate azure.
-NEUTRAL = "background-color: rgba(63,125,156,0.20); color:#6f9cb3; font-weight:600"
+NEUTRAL = "background-color: rgba(63,125,156,0.16); color:#3f7d9c; font-weight:600"
 
 
 def severity_cell(value, *, hi: float = 60.0, mid: float = 40.0,
