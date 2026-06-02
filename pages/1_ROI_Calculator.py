@@ -3349,8 +3349,9 @@ if modality == "🏭 Indoor Vertical Farm":
         # Apply a subtle background to alternating rows for readability
         return [MATCH if row.name % 2 == 0 else ""] * len(row)
 
+    _summary_df = pd.DataFrame(summary_data)
     st.dataframe(
-        pd.DataFrame(summary_data).style.apply(highlight_alternating_rows, axis=1),
+        _summary_df.style.apply(highlight_alternating_rows, axis=1),
         use_container_width=True, hide_index=True,
     )
     
@@ -4626,7 +4627,7 @@ elif modality == "🌿 High-Tech Greenhouse":
 
     # ── Full results table ────────────────────────────────────────────────────
     st.subheader("Full Results")
-    st.dataframe(pd.DataFrame({
+    _gh_res_df = pd.DataFrame({
         "Metric": [
             "Effective Grow Area (m²)", "Gross Area (m²)", "Structure Type",
             "Cycles / Year", "Harvest Mode", "Total Annual kg", "Price ($/kg)",
@@ -4660,7 +4661,11 @@ elif modality == "🌿 High-Tech Greenhouse":
             f"${gh_r['net_income']:,.0f}",
             f"${gh_r['npv']:,.0f}",
         ],
-    }), use_container_width=True, hide_index=True)
+    })
+    st.dataframe(
+        _gh_res_df.style.apply(lambda r: [MATCH if r.name % 2 == 0 else ""] * len(r), axis=1),
+        use_container_width=True, hide_index=True,
+    )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # COUNTRY & CROP COMPARISON
@@ -5755,7 +5760,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
     st.subheader("Full Results")
     _frt1, _frt2 = st.tabs(["🌿 Plant Detail", "🐟 Fish Detail"]) # Keep emojis in tab labels
     with _frt1:
-        st.dataframe(pd.DataFrame({
+        _aq_p_df = pd.DataFrame({
             "Metric": ["Effective Grow Area (m²)","Gross Area (m²)","Structure Type",
                        "Cycles/Year","Harvest Mode","Annual kg","Price ($/kg)",
                        "Revenue","Energy","Variable","Water","Labour","Maintenance","Rent",
@@ -5769,9 +5774,13 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                       f"${_pr['annual_rent']:,.0f}", f"${_pr['total_annual_costs']:,.0f}",
                       f"${_pr['ebitda']:,.0f}", f"{_pr['ebitda_margin']*100:.1f}%",
                       f"${_pr['total_capex']:,.0f}", f"{_pr['annual_kwh']:,.0f}"],
-        }), use_container_width=True, hide_index=True)
+        })
+        st.dataframe(
+            _aq_p_df.style.apply(lambda r: [MATCH if r.name % 2 == 0 else ""] * len(r), axis=1),
+            use_container_width=True, hide_index=True,
+        )
     with _frt2:
-        st.dataframe(pd.DataFrame({
+        _aq_f_df = pd.DataFrame({
             "Metric": ["Species","Tank Volume (m³)","System Scale","Harvest Biomass (kg)",
                        "Cycles/Year","Annual kg Fish","Price ($/kg)",
                        "Revenue","Feed","Fingerlings","Energy","Water","Labour","Maintenance",
@@ -5789,7 +5798,11 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
                       f"${_fr['total_fish_capex']:,.0f}", f"{_fr['annual_fish_kwh']:,.0f}",
                       f"{_fr['heating_kwh']:,.0f}", f"{_fr['ambient_temp_c']:.1f}",
                       f"{_fr['target_temp_c']:.1f}", f"{_fr['annual_n_output_g']/1000:.1f}"],
-        }), use_container_width=True, hide_index=True)
+        })
+        st.dataframe(
+            _aq_f_df.style.apply(lambda r: [MATCH if r.name % 2 == 0 else ""] * len(r), axis=1),
+            use_container_width=True, hide_index=True,
+        )
 
     st.divider()
 

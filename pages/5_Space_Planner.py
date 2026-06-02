@@ -6,7 +6,7 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from supabase import create_client, Client
 from core._styles import inject_styles
- from core._charts import style_fig
+from core._charts import style_fig
 from core.farm_context import render_farm_context_sidebar, get_active_farm
 from core.sun import get_sun_position, get_daily_sun_path, get_monthly_sun_summary, get_sunrise_sunset
 import plotly.graph_objects as go
@@ -418,352 +418,393 @@ def _render_consistency_panel(conflicts: list, farm: dict, layout_metrics: dict)
 def garden_planner():
     html_code = r'''
 
-    <style>
-        body, html { margin: 0; padding: 0; background: #0B0E14; overflow: hidden; height: 100vh; }
-        #ui-wrapper { height: 100vh; display: flex; flex-direction: column; box-sizing: border-box; padding: 10px; font-family: 'Inter', sans-serif; color: #eee; }
-        #main-view { flex: 1; min-height: 0; }
-    </style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:#0f1310;color:#e8e4db;font-family:'Inter',-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
+:root{
+  --s0:#0f1310;--s1:#191b19;--s2:#212321;--s3:#2a2d2a;
+  --line:#2e342e;--line-soft:#23271f;
+  --ink:#e8e4db;--ink2:#9ba394;--ink3:#5e6659;
+  --accent:#52a066;--accent-d:#3e7d4f;--accent-soft:rgba(82,160,102,0.15);
+  --accent-gold:#cf9b3f;--accent-gold-soft:rgba(207,155,63,0.15);
+  --danger:#c0573a;--danger-soft:rgba(192,87,58,0.12);
+  --azure:#3f7d9c;--azure-soft:rgba(63,125,156,0.15);
+  --plum:#8d6a9f;
+}
+#ui-wrapper{height:100vh;display:flex;flex-direction:column;padding:8px;gap:6px;overflow:hidden;}
+.toolbar{display:flex;justify-content:space-between;align-items:center;background:var(--s1);border:1px solid var(--line);border-radius:10px;padding:9px 14px;flex-shrink:0;gap:10px;}
+.toolbar .t-left{display:flex;align-items:center;gap:10px;}
+.toolbar .t-right{display:flex;gap:5px;flex-wrap:wrap;}
+.mode-badge{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.08em;color:var(--ink3);text-transform:uppercase;padding-left:12px;border-left:1px solid var(--line);}
+.mode-status-val{color:var(--accent);}
+.btn{font-family:inherit;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:7px 12px;border-radius:6px;cursor:pointer;border:1px solid var(--line);background:var(--s2);color:var(--ink2);transition:all .13s;white-space:nowrap;}
+.btn:hover{border-color:var(--ink3);color:var(--ink);}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--s0);}
+.btn.primary:hover{background:var(--accent-d);}
+.btn.on{border-color:var(--accent-gold);color:var(--accent-gold);background:var(--accent-gold-soft);}
+.btn.danger-hover:hover{border-color:var(--danger);color:var(--danger);}
+.btn.azure{background:var(--azure-soft);border-color:var(--azure);color:var(--azure);}
+.btn.azure:hover{background:var(--azure);color:#fff;}
+.kpi-strip{display:flex;flex-wrap:wrap;gap:0;background:var(--s1);border:1px solid var(--line);border-radius:10px;padding:8px 14px;flex-shrink:0;align-items:center;}
+.kpi-item{display:flex;flex-direction:column;gap:2px;padding:0 12px 0 0;min-width:76px;}
+.kpi-item+.kpi-item{border-left:1px solid var(--line-soft);padding-left:12px;}
+.kpi-lbl{font-size:8.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);}
+.kpi-val{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;}
+.kpi-val.c-azure{color:var(--azure);} .kpi-val.c-gold{color:var(--accent-gold);} .kpi-val.c-green{color:var(--accent);} .kpi-val.c-plum{color:var(--plum);} .kpi-val.c-ink2{color:var(--ink2);}
+.sun-strip{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-left:auto;padding-left:12px;border-left:1px solid var(--line-soft);}
+.sun-grp{display:flex;flex-direction:column;gap:3px;}
+.sun-grp label{font-size:8.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);}
+.sun-grp .sv{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink);font-weight:500;}
+.track{height:3px;border-radius:999px;background:var(--line);position:relative;min-width:80px;cursor:pointer;}
+.track-fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--accent-gold);}
+.track-knob{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;background:var(--accent-gold);transform:translate(-50%,-50%);box-shadow:0 0 0 2px var(--s1);pointer-events:none;}
+.snap-label{font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;}
+.snap-label input{accent-color:var(--accent);}
+.tool-select{padding:6px 10px;background:var(--s2);color:var(--ink);border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer;}
+.tool-select:focus{outline:none;border-color:var(--accent);}
+#main-view{flex:1;display:flex;gap:8px;min-height:0;}
+#canvas-container{flex:2;background:var(--s0);border-radius:10px;position:relative;border:1px solid var(--line);overflow:hidden;}
+#canvas2d{display:block;width:100%;height:100%;}
+.canvas-badge{position:absolute;left:10px;bottom:9px;font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);background:var(--s1);border:1px solid var(--line);padding:3px 8px;border-radius:4px;}
+#inspector{flex:1;background:var(--s1);border-radius:10px;border:1px solid var(--line);padding:12px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;min-width:210px;max-width:270px;}
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:var(--s0);} ::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+.insp-title{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);}
+.no-sel{color:var(--ink3);font-style:italic;font-size:12px;line-height:1.5;}
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label,.field-lbl{font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);}
+.fi{background:var(--s2);border:1px solid var(--line);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--ink);font-family:inherit;width:100%;}
+.fi:focus{outline:none;border-color:var(--accent);}
+.fi[readonly]{color:var(--azure);opacity:0.7;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.info-strip{font-size:10px;color:var(--azure);background:var(--azure-soft);border:1px solid var(--azure);border-radius:4px;padding:5px 8px;}
+.kpi-card{background:var(--s0);border:1px solid var(--line-soft);border-radius:7px;padding:8px 9px;display:flex;flex-direction:column;gap:4px;}
+.kpi-card-hdr{font-size:8px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);margin-bottom:2px;}
+.kpi-card-hdr.azure{color:var(--azure);}
+.kpi-card-hdr.muted{color:var(--ink3);border-top:1px solid var(--line-soft);padding-top:5px;margin-top:1px;}
+.kpi-row{display:flex;justify-content:space-between;font-size:10.5px;gap:6px;}
+.kpi-row .kl{color:var(--ink3);} .kpi-row .kv{font-family:'JetBrains Mono',monospace;color:var(--ink);font-weight:500;}
+.kpi-row .kv.acc{color:var(--accent);} .kpi-row .kv.gold{color:var(--accent-gold);} .kpi-row .kv.azure{color:var(--azure);} .kpi-row .kv.plum{color:var(--plum);} .kpi-row .kv.muted{color:var(--ink3);}
+.rack-btns{display:flex;gap:4px;flex-wrap:wrap;}
+.rack-btn{flex:1;padding:5px 3px;font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;cursor:pointer;background:var(--s2);color:var(--ink3);transition:all .13s;}
+.rack-btn:hover{color:var(--ink);border-color:var(--ink3);}
+.rack-btn-active{background:var(--accent-soft);}
+.warn-box{font-size:10px;color:var(--danger);padding:6px 8px;background:var(--danger-soft);border:1px solid var(--danger);border-radius:4px;}
+.ops-panel{background:var(--s0);border:1px solid var(--line);border-radius:6px;padding:9px;font-size:11px;color:var(--ink2);}
+.ops-panel-hdr{font-size:8.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--accent-gold);margin-bottom:5px;}
+.ops-panel-hdr.azure{color:var(--azure);}
+.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px;line-height:1.7;}
+.ops-grid .ok{color:var(--ink3);}
+.ops-no-data{color:var(--ink3);font-style:italic;font-size:11px;}
+.mini-modal{background:var(--s0);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:11px;color:var(--ink2);}
+.mini-modal-hdr{font-weight:700;color:var(--accent);margin-bottom:7px;font-size:11.5px;}
+.mini-modal-hdr.azure{color:var(--azure);}
+.mini-modal label{display:block;color:var(--ink3);margin-bottom:2px;font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;}
+.mini-modal input,.mini-modal select{width:100%;padding:5px 8px;background:var(--s2);border:1px solid var(--line);color:var(--ink);border-radius:4px;margin-bottom:5px;font-family:inherit;font-size:11px;}
+.mini-modal input:focus,.mini-modal select:focus{outline:none;border-color:var(--accent);}
+.modal-btns{display:flex;gap:5px;}
+.modal-status{margin-top:4px;font-size:10px;}
+.viewport-wrap{border:1px solid var(--line);border-radius:9px;overflow:hidden;position:relative;margin-top:auto;flex-shrink:0;height:260px;}
+#container3d{width:100%;height:100%;}
+.vp-badge{position:absolute;left:10px;top:8px;font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);background:rgba(0,0,0,0.4);padding:3px 7px;border-radius:4px;backdrop-filter:blur(4px);}
+.vp-hint{position:absolute;right:10px;bottom:8px;font-size:10px;color:var(--ink3);background:rgba(0,0,0,0.3);padding:3px 8px;border-radius:4px;backdrop-filter:blur(4px);}
+.delete-btn{font-family:inherit;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;width:100%;padding:7px;border:1px solid var(--line);background:transparent;color:var(--ink3);border-radius:5px;cursor:pointer;margin-top:4px;transition:all .13s;}
+.delete-btn:hover{background:var(--danger-soft);border-color:var(--danger);color:var(--danger);}
+#custom-confirm-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--s1);border:1px solid var(--danger);border-radius:10px;z-index:1000;padding:20px;box-shadow:0 8px 32px rgba(0,0,0,0.7);text-align:center;min-width:260px;}
+.confirm-msg{color:var(--ink);font-size:13px;margin-bottom:16px;}
+.confirm-btns{display:flex;gap:8px;justify-content:center;}
+input[type=range]{accent-color:var(--accent-gold);}
+</style>
 
-    <div id="ui-wrapper">
-        
-    <div style="display: flex; justify-content: space-between; align-items: center; background: #0D1117; padding: 10px 20px; border-radius: 8px; border: 1px solid #333; margin-bottom: 10px; flex-shrink: 0;">
-        <div style="display: flex; gap: 20px;">
-            <button id="opsBtn" onclick="toggleOpsMode()" style="padding: 10px 20px; background: #2ecc71; color: black; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">🚀 COMMIT TO OPERATIONS</button>
-            <button onclick="saveToSupabase()" style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">💾 SAVE TO CLOUD</button>
-            <button onclick="window.clearAll()" style="padding: 10px 20px; background: #441111; color: #ff9999; border: 1px solid #662222; border-radius: 4px; cursor: pointer;">🗑️ RESET</button>
-            <button id="shadowBtn" onclick="toggleShadows()" style="padding: 10px 20px; background: #2c3e50; color: #f1c40f; border: 1px solid #444; border-radius: 4px; cursor: pointer;">☀️ SHADOWS ON</button>
-            <button onclick="toggleFullscreen()" style="padding: 10px 20px; background: #555; color: white; border: none; border-radius: 4px; cursor: pointer;">⛶ FULLSCREEN</button>
-        </div>
-        <div style="font-size: 14px; color: #888; font-weight: bold;">
-            STATUS: <span id="mode-status" style="color: #2ecc71;">ARCHITECT MODE (EDITABLE)</span>
-        </div>
+<div id="ui-wrapper">
+<div class="toolbar">
+  <div class="t-left">
+    <button id="opsBtn" onclick="toggleOpsMode()" class="btn primary">COMMIT TO OPERATIONS</button>
+    <span class="mode-badge">STATUS:&nbsp;<span id="mode-status" class="mode-status-val">ARCHITECT MODE (EDITABLE)</span></span>
+  </div>
+  <div class="t-right">
+    <button onclick="saveToSupabase()" class="btn azure">Save to Cloud</button>
+    <button id="shadowBtn" onclick="toggleShadows()" class="btn on">Shadows On</button>
+    <button onclick="toggleFullscreen()" class="btn">Fullscreen</button>
+    <button onclick="window.clearAll()" class="btn danger-hover">Reset</button>
+  </div>
+</div>
+
+<div class="kpi-strip">
+  <div class="kpi-item"><span class="kpi-lbl">Building Area</span><span class="kpi-val c-azure"><span id="m-build">0.0</span> m&#178;</span></div>
+  <div class="kpi-item"><span class="kpi-lbl">Max Height</span><span class="kpi-val c-gold"><span id="m-height">0.0</span> m</span></div>
+  <div class="kpi-item"><span class="kpi-lbl">Canopy Area</span><span class="kpi-val c-green"><span id="m-canopy">0.0</span> m&#178;</span></div>
+  <div class="kpi-item"><span class="kpi-lbl">Efficiency</span><span class="kpi-val c-plum"><span id="m-eff">0</span>%</span></div>
+  <div class="kpi-item"><span class="kpi-lbl">Est. Yield/yr</span><span class="kpi-val c-gold"><span id="m-yield">&#8212;</span></span></div>
+  <div class="kpi-item"><span class="kpi-lbl">Racks</span><span class="kpi-val c-ink2"><span id="m-racks">0</span></span></div>
+  <div class="sun-strip">
+    <label class="snap-label"><input type="checkbox" id="snapToggle" checked> Snap 0.5m</label>
+    <div class="sun-grp">
+      <label>N&#8593; Rotation</label>
+      <div style="display:flex;align-items:center;gap:5px;">
+        <input type="range" id="northSlider" min="0" max="359" value="0" step="1" style="width:56px;" oninput="updateNorth(this.value)">
+        <span id="northLabel" class="sv mono" style="font-size:10px;color:var(--accent-gold);min-width:26px;">0&#176;</span>
+      </div>
     </div>
-
-        <div style="display:flex;flex-wrap:wrap;gap:16px;background:#161B22;padding:12px 16px;border-radius:8px;border:1px solid #333;margin-bottom:10px;align-items:center;">
-        <div><label style="font-size:9px;color:#888;letter-spacing:.08em;">BUILDING AREA</label><div style="font-size:17px;font-weight:bold;color:#3498db;"><span id="m-build">0.0</span> m&#178;</div></div>
-        <div><label style="font-size:9px;color:#888;letter-spacing:.08em;">MAX HEIGHT</label><div style="font-size:17px;font-weight:bold;color:#f1c40f;"><span id="m-height">0.0</span> m</div></div>
-        <div><label style="font-size:9px;color:#888;letter-spacing:.08em;">CANOPY AREA</label><div style="font-size:17px;font-weight:bold;color:#2ecc71;"><span id="m-canopy">0.0</span> m&#178;</div></div>
-        <div><label style="font-size:9px;color:#888;letter-spacing:.08em;">EFFICIENCY</label><div style="font-size:17px;font-weight:bold;color:#E599F7;"><span id="m-eff">0</span>%</div></div>
-        <div><label style="font-size:9px;color:#888;letter-spacing:.08em;">EST. YIELD/YR</label><div style="font-size:17px;font-weight:bold;color:#f1c40f;"><span id="m-yield">&#8212;</span></div></div>
-        <div><label style="font-size:9px;color:#888;letter-spacing:.08em;">RACKS</label><div style="font-size:17px;font-weight:bold;color:#aaa;"><span id="m-racks">0</span></div></div>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <label style="font-size:11px;color:#888;display:flex;align-items:center;gap:4px;cursor:pointer;">
-                <input type="checkbox" id="snapToggle" checked style="accent-color:#3498db;"> Snap 0.5m
-            </label>
-            <div style="display:flex;align-items:center;gap:4px;">
-                <span style="font-size:10px;color:#888;">N&#8593;</span>
-                <input type="range" id="northSlider" min="0" max="359" value="0" step="1"
-                    style="width:60px;accent-color:#f1c40f;" oninput="updateNorth(this.value)">
-                <span id="northLabel" style="font-size:10px;color:#f1c40f;min-width:28px;">0&#176;</span>
-                <span style="font-size:10px;color:#888;margin-left:8px;">&#9728; Time:</span>
-                <input type="range" id="sunHourSlider" min="6" max="20" value="12" step="0.5"
-                    style="width:80px;accent-color:#f1c40f;" oninput="updateSunFromSlider()">
-                <span id="sunHourLabel" style="font-size:10px;color:#f1c40f;min-width:36px;">12:00</span>
-                <button id="sunPlayBtn" onclick="toggleSunAnimation()" style="margin-top:6px;padding:4px 14px;background:#2d6a4f;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">&#9654; Play</button>
-            </div>
-            <select id="toolSelect" onchange="handleToolChange()" style="padding:7px 10px;background:#1e2530;color:white;border:1px solid #444;border-radius:5px;font-size:13px;">
-                <option value="building">&#127963; Building</option>
-                <option value="plot">&#128208; Property Plot</option>
-                <option value="rack">&#128752; Std Rack (multi-layer)</option>
-                <option value="wall_rack">&#128255; Wall Rack (vertical)</option>
-                <option value="tower_rack">&#11835; Tower Rack (column)</option>
-                <option value="single_shelf">&#9645; Single Shelf / Bench</option>
-                <option value="tank">&#128031; Fish Tank</option>
-                <option value="equip">&#9881; Equipment</option>
-                <option value="path">&#128739; Pathway</option>
-                <option value="measure">&#128207; Measure Tape</option>
-                <option value="select">&#128433; Select / Move</option>
-            </select>
+    <div class="sun-grp" style="min-width:150px;">
+      <label id="sunHourLabelTop">Time of Day &middot; 12:00</label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div class="track" id="sunTrackWrap" style="flex:1;">
+          <div class="track-fill" id="sunTrackFill" style="width:43%;"></div>
+          <div class="track-knob" id="sunTrackKnob" style="left:43%;"></div>
         </div>
+        <input type="range" id="sunHourSlider" min="6" max="20" value="12" step="0.5" style="position:absolute;opacity:0;pointer-events:none;width:1px;" oninput="updateSunFromSlider()">
+        <button id="sunPlayBtn" onclick="toggleSunAnimation()" class="btn" style="padding:4px 9px;font-size:11px;">&#9654; Play</button>
+      </div>
     </div>
+    <select id="toolSelect" onchange="handleToolChange()" class="tool-select">
+      <option value="building">&#127963; Building</option>
+      <option value="plot">&#128208; Property Plot</option>
+      <option value="rack">&#128752; Std Rack (multi-layer)</option>
+      <option value="wall_rack">&#128255; Wall Rack (vertical)</option>
+      <option value="tower_rack">&#11835; Tower Rack (column)</option>
+      <option value="single_shelf">&#9645; Single Shelf / Bench</option>
+      <option value="tank">&#128031; Fish Tank</option>
+      <option value="equip">&#9881; Equipment</option>
+      <option value="path">&#128739; Pathway</option>
+      <option value="measure">&#128207; Measure Tape</option>
+      <option value="select">&#128433; Select / Move</option>
+    </select>
+  </div>
+</div>
 
-            <div id="main-view" style="display: flex; gap: 10px;">
-            <div id="canvas-container" style="flex: 2; background: #000; border-radius: 8px; position: relative; border: 1px solid #333; overflow: hidden;">
-                <canvas id="canvas2d" style="display: block; width: 100%; height: 100%;"></canvas>
-            </div>
+<div id="main-view">
+  <div id="canvas-container">
+    <canvas id="canvas2d"></canvas>
+    <div class="canvas-badge">2D &middot; Top-down &middot; 1px = 0.033m</div>
+  </div>
+  <div id="inspector">
+    <div class="insp-title">Inspector</div>
+    <div id="no-selection" class="no-sel">Select an element to edit its properties.</div>
+    <div id="editor-ui" style="display:none;flex-direction:column;gap:9px;">
+      <div class="field"><label>Name</label><input type="text" id="objName" class="fi"></div>
 
-            <div id="inspector" style="flex: 1; background: #0D1117; border-radius: 8px; border: 1px solid #333; padding: 20px; display: flex; flex-direction: column; gap: 20px;">
-                <h3 style="margin: 0; color: #fff;">Object Inspector</h3>
-                <div id="no-selection" style="color: #666; font-style: italic;">Select an element to edit properties.</div>
-                
-                <div id="editor-ui" style="display: none; flex-direction: column; gap: 15px;">
-                    <div>
-                        <label style="font-size: 11px; color: #888;">NAME</label>
-                        <input type="text" id="objName" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff; margin-top: 5px;">
-                    </div>
-                    
-                    <div id="building-ui" style="display:none;">
-    <div>
-        <label style="font-size: 11px; color: #888;">FACILITY CATEGORY</label>
-        <select id="buildType" onchange="toggleSpanUI()" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff; margin-top: 5px;">
+      <div id="building-ui" style="display:none;flex-direction:column;gap:7px;">
+        <div class="field"><label>Facility Category</label>
+          <select id="buildType" onchange="toggleSpanUI()" class="fi">
             <option value="warehouse">Vertical Farm (Warehouse)</option>
             <option value="greenhouse">High-Tech Greenhouse</option>
             <option value="polytunnel">Polytunnel (Arched)</option>
-        </select>
-    </div>
-
-    <div id="span-selector" style="display:none; margin-top:10px;">
-        <label style="font-size: 11px; color: #888;">STANDARD SPAN (WIDTH)</label>
-        <select id="standardSpan" style="width: 100%; padding: 8px; background: #333; border: 1px solid #444; color: #fff; margin-top: 5px;">
-            <option value="6.0">6.0m Small Span</option>
-            <option value="8.0">8.0m Medium Span</option>
-            <option value="9.6" selected>9.6m Professional Span</option>
-            <option value="12.0">12.0m Wide Span</option>
-        </select>
-    </div>
-
-    <div id="dim-inputs" style="margin-top:10px;">
-        <div style="display: flex; gap: 10px;">
-            <div style="flex: 1;">
-                <label id="w-label" style="font-size: 11px; color: #888;">WIDTH (m)</label>
-                <input type="number" id="buildWidth" step="0.1" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff;">
-            </div>
-            <div style="flex: 1;">
-                <label style="font-size: 11px; color: #888;">LENGTH (m)</label>
-                <input type="number" id="buildLength" step="0.1" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff;">
-            </div>
+          </select>
         </div>
-        <div style="margin-top:10px;">
-            <label style="font-size: 11px; color: #888;">MAX HEIGHT (m)</label>
-            <input type="number" id="buildHeight" step="0.5" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff;">
+        <div id="span-selector" style="display:none;">
+          <div class="field"><label>Standard Span (Width)</label>
+            <select id="standardSpan" class="fi">
+              <option value="6.0">6.0m Small Span</option>
+              <option value="8.0">8.0m Medium Span</option>
+              <option value="9.6" selected>9.6m Professional Span</option>
+              <option value="12.0">12.0m Wide Span</option>
+            </select>
+          </div>
         </div>
-    </div>
-                        <div id="warn-msg" style="display:none; margin-top:10px; color:#e74c3c; font-size:11px; padding:10px; background:rgba(231,76,60,0.1); border:1px solid #e74c3c; border-radius:4px;">
-                            ⚠️ Warning: Racks are outside building bounds!
-                        </div>
-                    </div>
+        <div id="dim-inputs">
+          <div class="row2">
+            <div class="field"><label id="w-label">Width (m)</label><input type="number" id="buildWidth" step="0.1" class="fi mono"></div>
+            <div class="field"><label>Length (m)</label><input type="number" id="buildLength" step="0.1" class="fi mono"></div>
+          </div>
+          <div class="field" style="margin-top:5px;"><label>Max Height (m)</label><input type="number" id="buildHeight" step="0.5" class="fi mono"></div>
+        </div>
+        <div id="warn-msg" style="display:none;" class="warn-box">&#9888;&#65039; Racks are outside building bounds!</div>
+      </div>
 
-                    <div id="rack-ui" style="display:none;">
-                        <!-- Rack subtype selector -->
-                        <div style="margin-bottom:8px;">
-                            <label style="font-size:11px;color:#888;display:block;margin-bottom:4px;">RACK TYPE</label>
-                            <div id="rack-type-btns" style="display:flex;gap:4px;flex-wrap:wrap;">
-                                <button onclick="setRackSubtype('standard')" id="rtype-standard"
-                                    style="flex:1;padding:6px 4px;font-size:10px;font-weight:700;border:1px solid #444;border-radius:3px;cursor:pointer;background:#1e3a2a;color:#2ecc71;">
-                                    &#128752; STANDARD</button>
-                                <button onclick="setRackSubtype('wall')" id="rtype-wall"
-                                    style="flex:1;padding:6px 4px;font-size:10px;font-weight:700;border:1px solid #444;border-radius:3px;cursor:pointer;background:#222;color:#888;">
-                                    &#128255; WALL</button>
-                                <button onclick="setRackSubtype('tower')" id="rtype-tower"
-                                    style="flex:1;padding:6px 4px;font-size:10px;font-weight:700;border:1px solid #444;border-radius:3px;cursor:pointer;background:#222;color:#888;">
-                                    &#11835; TOWER</button>
-                                <button onclick="setRackSubtype('bench')" id="rtype-bench"
-                                    style="flex:1;padding:6px 4px;font-size:10px;font-weight:700;border:1px solid #444;border-radius:3px;cursor:pointer;background:#222;color:#888;">
-                                    &#9645; BENCH</button>
-                            </div>
-                        </div>
-                        <!-- Subtype descriptions -->
-                        <div id="rack-desc" style="font-size:10px;color:#666;margin-bottom:8px;padding:6px;background:#0d1117;border-radius:3px;"></div>
-                        <!-- Universal Rack Dimensions -->
-                        <div style="display:flex;gap:8px;margin-bottom:8px;">
-                            <div style="flex:1;" id="wrapper-rackWidth">
-                                <label id="lbl-rackWidth" style="font-size:11px;color:#888;display:block;">WIDTH (m)</label>
-                                <input type="number" id="rackWidth" step="0.1" min="0.1" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
-                            </div>
-                            <div style="flex:1;" id="wrapper-rackLength">
-                                <label id="lbl-rackLength" style="font-size:11px;color:#888;display:block;">LENGTH (m)</label>
-                                <input type="number" id="rackLength" step="0.1" min="0.1" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
-                            </div>
-                            <div style="flex:1;">
-                                <label id="lbl-rackHeight" style="font-size:11px;color:#888;display:block;">HEIGHT (m)</label>
-                                <input type="number" id="rackHeight" step="0.1" min="0.1" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
-                            </div>
-                        </div>
-                        <!-- Wall rack thickness info strip (hidden for non-wall) -->
-                        <div id="wall-thickness-strip" style="display:none;font-size:10px;color:#74c0fc;background:#0d1a2a;border:1px solid #1a3a5a;border-radius:3px;padding:5px 8px;margin-bottom:8px;">
-                            📐 Thickness fixed at <strong id="wall-thickness-val">0.30</strong> m &nbsp;·&nbsp;
-                            Grow area = <strong>Length × Height</strong> &nbsp;·&nbsp;
-                            Adjust length and height to set growing surface
-                        </div>
-
-                        <!-- Layers and Spacing (Applies to standard) -->
-                        <div id="rack-layer-controls" style="margin-bottom:8px;">
-                            <div style="display:flex;gap:8px;">
-                                <div style="flex:1;">
-                                    <label style="font-size:11px;color:#888;">LAYERS</label>
-                                    <input type="number" id="objLayers" min="1" max="20" value="5" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
-                                </div>
-                                <div style="flex:1;" id="spacing-wrapper">
-                                    <label style="font-size:11px;color:#888;display:block;">SPACING (m)</label>
-                                    <input type="number" id="layerSpacing" step="0.1" value="0.6" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Tower rack controls (shows for tower only) -->
-                        <div id="rack-tower-controls" style="display:none;margin-bottom:8px;">
-                            <label style="font-size:11px;color:#888;display:block;">PLANTS PER TOWER</label>
-                            <input type="number" id="towerPlants" step="1" value="20" min="4" max="60" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
-                        </div>
-                        <!-- Live KPIs — two sections: Model forecast & Layout actual -->
-                        <div id="rack-kpis" style="margin-top:10px;background:#0d1117;border:1px solid #2a3a2a;border-radius:4px;padding:8px;font-size:11px;color:#aaa;">
-                            <div style="font-size:9px;font-weight:700;color:#2ecc71;letter-spacing:.08em;margin-bottom:4px;">📐 THIS RACK</div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:8px;">
-                                <span style="color:#888;">Canopy:</span><span id="kpi-canopy" style="color:#2ecc71;font-weight:600;"></span>
-                                <span style="color:#888;">Yield/cycle:</span><span id="kpi-yield-cycle" style="color:#f1c40f;font-weight:600;"></span>
-                                <span style="color:#888;">Yield/year:</span><span id="kpi-yield-year" style="color:#f1c40f;font-weight:600;"></span>
-                                <span style="color:#888;">Revenue/yr:</span><span id="kpi-revenue" style="color:#e599f7;font-weight:600;"></span>
-                                <span style="color:#888;">Energy/yr:</span><span id="kpi-energy" style="color:#ff9f43;font-weight:600;"></span>
-                                <span style="color:#888;">Gross margin:</span><span id="kpi-margin" style="color:#54a0ff;font-weight:600;"></span>
-                            </div>
-                            <div style="font-size:9px;font-weight:700;color:#888;letter-spacing:.08em;margin-bottom:4px;border-top:1px solid #222;padding-top:6px;">📊 VS MODEL (pro-rated)</div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;">
-                                <span style="color:#666;">Model canopy:</span><span id="kpi-model-canopy" style="color:#888;font-weight:600;"></span>
-                                <span style="color:#666;">Model yield/yr:</span><span id="kpi-model-yield" style="color:#888;font-weight:600;"></span>
-                                <span style="color:#666;">Model revenue:</span><span id="kpi-model-rev" style="color:#888;font-weight:600;"></span>
-                                <span style="color:#666;">Δ Revenue:</span><span id="kpi-delta-rev" style="font-weight:600;"></span>
-                            </div>
-                        </div>
-                        <button onclick="duplicateSelected()" style="width:100%;margin-top:6px;padding:8px;background:#1e3a5f;border:1px solid #3498db;color:#3498db;font-weight:bold;border-radius:4px;cursor:pointer;">&#10064; DUPLICATE (Ctrl+D)</button>
-                        <div id="aisle-warn" style="display:none;margin-top:8px;font-size:10px;color:#e74c3c;padding:6px;background:rgba(231,76,60,0.1);border:1px solid #e74c3c;border-radius:3px;">
-                            &#9888; Aisle &lt;0.8m &#8212; too narrow for trolley access
-                        </div>
-                    </div>
-
-                    <div id="tank-ui" style="display:none;">
-                        <div style="display: flex; gap: 10px;">
-                            <div style="flex: 1;">
-                                <label style="font-size: 11px; color: #888;">WIDTH (m)</label>
-                                <input type="number" id="tankWidth" step="0.1" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff;">
-                            </div>
-                            <div style="flex: 1;">
-                                <label style="font-size: 11px; color: #888;">LENGTH (m)</label>
-                                <input type="number" id="tankLength" step="0.1" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff;">
-                            </div>
-                        </div>
-                        <div style="margin-top:10px;">
-                            <label style="font-size: 11px; color: #888;">TANK DEPTH (m)</label>
-                            <input type="number" id="tankDepth" step="0.1" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff; margin-top: 5px;">
-                        </div>
-                        <!-- Live KPIs -->
-                        <div id="tank-kpis" style="margin-top:10px;background:#0d1117;border:1px solid #1a3a5a;border-radius:4px;padding:8px;font-size:11px;color:#aaa;">
-                            <div style="font-size:9px;font-weight:700;color:#3498db;letter-spacing:.08em;margin-bottom:4px;">🐟 THIS TANK</div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-                                <span style="color:#888;">Volume:</span><span id="kpi-tank-vol" style="color:#3498db;font-weight:600;"></span>
-                                <span style="color:#888;">Yield/cycle:</span><span id="kpi-fish-cycle" style="color:#f1c40f;font-weight:600;"></span>
-                                <span style="color:#888;">Yield/year:</span><span id="kpi-fish-year" style="color:#f1c40f;font-weight:600;"></span>
-                                <span style="color:#888;">Revenue/yr:</span><span id="kpi-fish-rev" style="color:#e599f7;font-weight:600;"></span>
-                                <span style="color:#888;">Gross margin:</span><span id="kpi-fish-margin" style="color:#54a0ff;font-weight:600;"></span>
-                            </div>
-                            <div style="font-size:9px;font-weight:700;color:#888;letter-spacing:.08em;margin-bottom:4px;border-top:1px solid #222;padding-top:6px;">📊 VS MODEL (pro-rated)</div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;">
-                                <span style="color:#666;">Model vol:</span><span id="kpi-model-tank-vol" style="color:#888;font-weight:600;"></span>
-                                <span style="color:#666;">Model yield/yr:</span><span id="kpi-model-fish-yield" style="color:#888;font-weight:600;"></span>
-                                <span style="color:#666;">Model revenue:</span><span id="kpi-model-fish-rev" style="color:#888;font-weight:600;"></span>
-                                <span style="color:#666;">Δ Revenue:</span><span id="kpi-delta-fish-rev" style="font-weight:600;"></span>
-                            </div>
-                        </div>
-                        <div style="margin-top:10px; font-size: 10px; color: #3498db;">
-                            Estimated Water Weight: <span id="water-weight">0</span> kg
-                        </div>
-
-                        <!-- Fish Ops Panel — visible in Operations Mode only -->
-                        <div id="fish-ops-panel" style="display:none;margin-top:10px;background:#0d1117;border:1px solid #1a3a5a;border-radius:6px;padding:10px;font-size:11px;color:#ccc;">
-                            <div style="font-size:10px;font-weight:700;color:#3498db;margin-bottom:6px;letter-spacing:1px;">🐟 LIVE FISH CYCLE</div>
-                            <div id="fish-ops-content"></div>
-                            <div id="fish-no-cycle" style="display:none;color:#666;font-style:italic;">No active fish cycle in this tank.</div>
-                            <button id="fish-open-ht-btn" onclick="openFishInHarvestTracker()" style="display:none;width:100%;margin-top:8px;padding:7px;background:#1e3a5f;border:1px solid #3498db;color:#3498db;font-weight:bold;border-radius:4px;cursor:pointer;font-size:11px;">&#128640; Open in Harvest Tracker</button>
-                            <button id="fish-stock-btn" onclick="openStockTankModal()" style="display:none;width:100%;margin-top:6px;padding:7px;background:#0d2a3a;border:1px solid #3498db;color:#3498db;font-weight:bold;border-radius:4px;cursor:pointer;font-size:11px;">&#43; Stock Tank</button>
-                        </div>
-
-                        <!-- Stock Tank Modal -->
-                        <div id="stock-tank-modal" style="display:none;margin-top:10px;background:#111;border:1px solid #444;border-radius:6px;padding:12px;font-size:11px;color:#ccc;">
-                            <div style="font-weight:700;color:#3498db;margin-bottom:8px;">🐟 Stock Tank</div>
-                            <label style="display:block;color:#888;margin-bottom:2px;">Fish Species</label>
-                            <select id="st-species" onchange="onSpeciesChange()" style="width:100%;padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:3px;margin-bottom:6px;"></select>
-                            <div id="st-species-info" style="font-size:10px;color:#3498db;margin-bottom:6px;"></div>
-                            <label style="display:block;color:#888;margin-bottom:2px;">Stocking Date</label>
-                            <input type="date" id="st-stock-date" style="width:100%;padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:3px;margin-bottom:6px;">
-                            <label style="display:block;color:#888;margin-bottom:2px;">Expected Harvest Date <span style="color:#555;">(auto-computed)</span></label>
-                            <input type="date" id="st-harvest-date" style="width:100%;padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:3px;margin-bottom:6px;">
-                            <label style="display:block;color:#888;margin-bottom:2px;">Tank Volume (m³) <span style="color:#555;">(auto from tank)</span></label>
-                            <input type="number" id="st-volume" step="0.1" style="width:100%;padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:3px;margin-bottom:8px;">
-                            <div style="display:flex;gap:6px;">
-                                <button onclick="submitStockTank()" style="flex:1;padding:7px;background:#3498db;border:none;color:#fff;font-weight:bold;border-radius:4px;cursor:pointer;">💾 Save</button>
-                                <button onclick="closeStockTankModal()" style="flex:1;padding:7px;background:#333;border:1px solid #555;color:#aaa;border-radius:4px;cursor:pointer;">✖ Cancel</button>
-                            </div>
-                            <div id="st-status" style="margin-top:6px;font-size:10px;"></div>
-                        </div>
-                    </div>
-
-                    <div id="equip-ui" style="display:none;">
-                        <label style="font-size: 11px; color: #888;">EQUIPMENT TYPE</label>
-                        <select id="equipType" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff; margin-top: 5px;">
-                            <option value="hvac">HVAC Unit</option>
-                            <option value="biofilter">Biofilter System</option>
-                            <option value="pump">Pump Station</option>
-                        </select>
-                        <div style="margin-top:10px;">
-                            <label style="font-size: 11px; color: #888;">UNIT HEIGHT (m)</label>
-                            <input type="number" id="equipHeight" step="0.1" value="2.0" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff;">
-                        </div>
-                    </div>
-
-                    <div id="path-ui" style="display:none;">
-                        <div style="display: flex; gap: 10px;">
-                            <div style="flex: 1;">
-                                <label style="font-size: 11px; color: #888;">PATH WIDTH (m)</label>
-                                <input type="number" id="pathWidth" step="0.1" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff;">
-                            </div>
-                            <div style="flex: 1;">
-                                <label style="font-size: 11px; color: #888;">PATH LENGTH (m)</label>
-                                <input type="number" id="pathLength" step="0.1" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: #fff;">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Ops Cycle Panel — visible in Operations Mode only -->
-                    <div id="ops-cycle-panel" style="display:none;margin-top:10px;background:#0d1117;border:1px solid #2a4a3a;border-radius:6px;padding:10px;font-size:11px;color:#ccc;">
-                        <div style="font-size:10px;font-weight:700;color:#f1c40f;margin-bottom:6px;letter-spacing:1px;">⚡ LIVE CYCLE DATA</div>
-                        <div id="ops-cycle-content"></div>
-                        <div id="ops-no-cycle" style="display:none;color:#666;font-style:italic;">No active cycle on this unit.</div>
-                        <button id="ops-open-ht-btn" onclick="openInHarvestTracker()" style="display:none;width:100%;margin-top:8px;padding:7px;background:#1e3a5f;border:1px solid #3498db;color:#3498db;font-weight:bold;border-radius:4px;cursor:pointer;font-size:11px;">&#128640; Open in Harvest Tracker</button>
-                        <button id="ops-start-cycle-btn" onclick="openStartCycleModal()" style="display:none;width:100%;margin-top:6px;padding:7px;background:#1a3a1a;border:1px solid #2ecc71;color:#2ecc71;font-weight:bold;border-radius:4px;cursor:pointer;font-size:11px;">&#43; Start New Cycle</button>
-                    </div>
-
-                    <!-- Start Cycle Modal -->
-                    <div id="start-cycle-modal" style="display:none;margin-top:10px;background:#111;border:1px solid #444;border-radius:6px;padding:12px;font-size:11px;color:#ccc;">
-                        <div style="font-weight:700;color:#2ecc71;margin-bottom:8px;">🌱 Start New Cycle</div>
-                        <label style="display:block;color:#888;margin-bottom:2px;">Crop / Species</label>
-                        <select id="sc-crop" style="width:100%;padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:3px;margin-bottom:6px;"></select>
-                        <label style="display:block;color:#888;margin-bottom:2px;">Seeding Date</label>
-                        <input type="date" id="sc-seed-date" style="width:100%;padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:3px;margin-bottom:6px;">
-                        <label style="display:block;color:#888;margin-bottom:2px;">Expected Harvest Date</label>
-                        <input type="date" id="sc-harvest-date" style="width:100%;padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:3px;margin-bottom:6px;">
-                        <label style="display:block;color:#888;margin-bottom:2px;">Area (m²) <span style="color:#555;">(auto from unit)</span></label>
-                        <input type="number" id="sc-area" step="0.1" style="width:100%;padding:6px;background:#222;border:1px solid #444;color:#fff;border-radius:3px;margin-bottom:8px;">
-                        <div style="display:flex;gap:6px;">
-                            <button onclick="submitStartCycle()" style="flex:1;padding:7px;background:#2ecc71;border:none;color:#000;font-weight:bold;border-radius:4px;cursor:pointer;">💾 Save</button>
-                            <button onclick="closeStartCycleModal()" style="flex:1;padding:7px;background:#333;border:1px solid #555;color:#aaa;border-radius:4px;cursor:pointer;">✖ Cancel</button>
-                        </div>
-                        <div id="sc-status" style="margin-top:6px;font-size:10px;"></div>
-                    </div>
-
-                <div style="margin-top: auto; padding-top: 15px; border-top: 1px solid #333;">
-                    <button onclick="deleteSelected()" style="width: 100%; padding: 10px; background: #882222; border: none; color: white; border-radius: 4px; cursor: pointer;">Delete Selected</button>
-                </div>
-                </div>
-
-                <div style="margin-top: auto; border: 1px solid #222; border-radius: 8px; overflow: hidden;">
-                    <div id="container3d" style="height: 300px; background: #000;"></div>
-                </div>
+      <div id="rack-ui" style="display:none;flex-direction:column;gap:7px;">
+        <div>
+          <div class="field-lbl" style="margin-bottom:5px;">Rack Type</div>
+          <div class="rack-btns" id="rack-type-btns">
+            <button onclick="setRackSubtype('standard')" id="rtype-standard" class="rack-btn rack-btn-active">&#128752; Standard</button>
+            <button onclick="setRackSubtype('wall')"     id="rtype-wall"     class="rack-btn">&#128255; Wall</button>
+            <button onclick="setRackSubtype('tower')"    id="rtype-tower"    class="rack-btn">&#11835; Tower</button>
+            <button onclick="setRackSubtype('bench')"    id="rtype-bench"    class="rack-btn">&#9645; Bench</button>
+          </div>
+        </div>
+        <div id="rack-desc" style="font-size:10px;color:var(--ink3);padding:5px 7px;background:var(--s0);border-radius:4px;border:1px solid var(--line-soft);"></div>
+        <div id="wall-thickness-strip" style="display:none;" class="info-strip"></div>
+        <div class="row2">
+          <div class="field" id="wrapper-rackWidth"><label id="lbl-rackWidth">Width (m)</label><input type="number" id="rackWidth" step="0.1" min="0.1" class="fi mono"></div>
+          <div class="field" id="wrapper-rackLength"><label id="lbl-rackLength">Length (m)</label><input type="number" id="rackLength" step="0.1" min="0.1" class="fi mono"></div>
+        </div>
+        <div class="field"><label id="lbl-rackHeight">Height (m)</label><input type="number" id="rackHeight" step="0.1" min="0.1" class="fi mono"></div>
+        <div id="rack-layer-controls">
+          <div class="row2">
+            <div class="field"><label>Layers</label><input type="number" id="objLayers" min="1" max="20" value="5" class="fi mono"></div>
+            <div class="field" id="spacing-wrapper"><label>Spacing (m)</label><input type="number" id="layerSpacing" step="0.1" value="0.6" class="fi mono"></div>
+          </div>
+        </div>
+        <!-- Tower rack controls (shows for tower only) -->
+        <div id="rack-tower-controls" style="display:none;margin-bottom:8px;">
+            <label style="font-size:11px;color:#888;display:block;">PLANTS PER TOWER</label>
+            <input type="number" id="towerPlants" step="1" value="20" min="4" max="60" style="width:100%;padding:8px;background:#222;border:1px solid #444;color:#fff;margin-top:5px;">
+            <label style="font-size:11px;color:#888;display:block;margin-top:8px;">TOWER SHAPE</label>
+            <div style="display:flex;gap:4px;margin-top:5px;">
+                <button id="tshape-round" onclick="setTowerShape('round')"
+                    style="flex:1;padding:6px 4px;font-size:10px;font-weight:700;border:1px solid #52a066;border-radius:3px;cursor:pointer;background:rgba(82,160,102,0.15);color:#52a066;">
+                    ● Round</button>
+                <button id="tshape-rect" onclick="setTowerShape('rect')"
+                    style="flex:1;padding:6px 4px;font-size:10px;font-weight:700;border:1px solid #444;border-radius:3px;cursor:pointer;background:#222;color:#888;">
+                    ▬ Rect</button>
             </div>
         </div>
-
-        <!-- Custom Confirm Modal -->
-        <div id="custom-confirm-modal" style="display:none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #161B22; border: 1px solid #e74c3c; border-radius: 8px; z-index: 1000; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.8); text-align: center; min-width: 250px;">
-            <div id="custom-confirm-msg" style="color: #eee; font-size: 14px; margin-bottom: 20px;">Are you sure?</div>
-            <div style="display:flex;gap:10px;justify-content:center;">
-                <button id="custom-confirm-yes" style="flex: 1; padding: 8px 16px; background: #e74c3c; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: bold;">Yes</button>
-                <button onclick="closeCustomConfirm()" style="flex: 1; padding: 8px 16px; background: #333; border: 1px solid #555; color: #ccc; border-radius: 4px; cursor: pointer;">Cancel</button>
-            </div>
+        <div id="rack-kpis" class="kpi-card">
+          <div class="kpi-card-hdr">This Rack</div>
+          <div class="kpi-row"><span class="kl">Canopy</span><span class="kv acc" id="kpi-canopy"></span></div>
+          <div class="kpi-row"><span class="kl">Yield/cycle</span><span class="kv gold" id="kpi-yield-cycle"></span></div>
+          <div class="kpi-row"><span class="kl">Yield/year</span><span class="kv gold" id="kpi-yield-year"></span></div>
+          <div class="kpi-row"><span class="kl">Revenue/yr</span><span class="kv plum" id="kpi-revenue"></span></div>
+          <div class="kpi-row"><span class="kl">Energy/yr</span><span class="kv" style="color:var(--accent-gold);" id="kpi-energy"></span></div>
+          <div class="kpi-row"><span class="kl">Gross margin</span><span class="kv azure" id="kpi-margin"></span></div>
+          <div class="kpi-card-hdr muted">vs Model (pro-rated)</div>
+          <div class="kpi-row"><span class="kl">Model canopy</span><span class="kv muted" id="kpi-model-canopy"></span></div>
+          <div class="kpi-row"><span class="kl">Model yield/yr</span><span class="kv muted" id="kpi-model-yield"></span></div>
+          <div class="kpi-row"><span class="kl">Model revenue</span><span class="kv muted" id="kpi-model-rev"></span></div>
+          <div class="kpi-row"><span class="kl">&#916; Revenue</span><span class="kv" id="kpi-delta-rev"></span></div>
         </div>
+        <button onclick="duplicateSelected()" class="btn azure" style="width:100%;">&#10064; Duplicate (Ctrl+D)</button>
+        <div id="aisle-warn" style="display:none;" class="warn-box">&#9888; Aisle &lt;0.8m &#8212; too narrow for trolley access</div>
+      </div>
+
+      <div id="tank-ui" style="display:none;flex-direction:column;gap:7px;">
+        <div class="row2">
+          <div class="field"><label>Width (m)</label><input type="number" id="tankWidth" step="0.1" class="fi mono"></div>
+          <div class="field"><label>Length (m)</label><input type="number" id="tankLength" step="0.1" class="fi mono"></div>
+        </div>
+        <div class="field"><label>Tank Depth (m)</label><input type="number" id="tankDepth" step="0.1" class="fi mono"></div>
+        <div id="tank-kpis" class="kpi-card">
+          <div class="kpi-card-hdr azure">This Tank</div>
+          <div class="kpi-row"><span class="kl">Volume</span><span class="kv azure" id="kpi-tank-vol"></span></div>
+          <div class="kpi-row"><span class="kl">Yield/cycle</span><span class="kv gold" id="kpi-fish-cycle"></span></div>
+          <div class="kpi-row"><span class="kl">Yield/year</span><span class="kv gold" id="kpi-fish-year"></span></div>
+          <div class="kpi-row"><span class="kl">Revenue/yr</span><span class="kv plum" id="kpi-fish-rev"></span></div>
+          <div class="kpi-row"><span class="kl">Gross margin</span><span class="kv azure" id="kpi-fish-margin"></span></div>
+          <div class="kpi-card-hdr muted">vs Model (pro-rated)</div>
+          <div class="kpi-row"><span class="kl">Model vol</span><span class="kv muted" id="kpi-model-tank-vol"></span></div>
+          <div class="kpi-row"><span class="kl">Model yield/yr</span><span class="kv muted" id="kpi-model-fish-yield"></span></div>
+          <div class="kpi-row"><span class="kl">Model revenue</span><span class="kv muted" id="kpi-model-fish-rev"></span></div>
+          <div class="kpi-row"><span class="kl">&#916; Revenue</span><span class="kv" id="kpi-delta-fish-rev"></span></div>
+        </div>
+        <div style="font-size:10px;color:var(--azure);">Est. water weight: <span id="water-weight" class="mono">0</span> kg</div>
+        <div id="fish-ops-panel" style="display:none;" class="ops-panel">
+          <div class="ops-panel-hdr azure">&#128031; Live Fish Cycle</div>
+          <div id="fish-ops-content" class="ops-grid"></div>
+          <div id="fish-no-cycle" style="display:none;" class="ops-no-data">No active fish cycle in this tank.</div>
+          <button id="fish-open-ht-btn" onclick="openFishInHarvestTracker()" style="display:none;margin-top:7px;width:100%;" class="btn azure">&#128640; Open in Harvest Tracker</button>
+          <button id="fish-stock-btn" onclick="openStockTankModal()" style="display:none;margin-top:5px;width:100%;" class="btn">+ Stock Tank</button>
+        </div>
+        <div id="stock-tank-modal" style="display:none;" class="mini-modal">
+          <div class="mini-modal-hdr azure">&#128031; Stock Tank</div>
+          <label>Fish Species</label><select id="st-species" onchange="onSpeciesChange()" class="fi"></select>
+          <div id="st-species-info" style="font-size:10px;color:var(--azure);margin-bottom:5px;"></div>
+          <label>Stocking Date</label><input type="date" id="st-stock-date" class="fi">
+          <label>Expected Harvest Date <span style="color:var(--ink3);">(auto-computed)</span></label><input type="date" id="st-harvest-date" class="fi">
+          <label>Tank Volume (m&#179;) <span style="color:var(--ink3);">(auto from tank)</span></label><input type="number" id="st-volume" step="0.1" class="fi">
+          <div class="modal-btns" style="margin-top:4px;">
+            <button onclick="submitStockTank()" class="btn primary" style="flex:1;">Save</button>
+            <button onclick="closeStockTankModal()" class="btn" style="flex:1;">Cancel</button>
+          </div>
+          <div id="st-status" class="modal-status"></div>
+        </div>
+      </div>
+
+      <div id="equip-ui" style="display:none;flex-direction:column;gap:7px;">
+        <div class="field"><label>Equipment Type</label>
+          <select id="equipType" class="fi">
+            <option value="hvac">HVAC Unit</option>
+            <option value="biofilter">Biofilter System</option>
+            <option value="pump">Pump Station</option>
+          </select>
+        </div>
+        <div class="field"><label>Unit Height (m)</label><input type="number" id="equipHeight" step="0.1" value="2.0" class="fi mono"></div>
+      </div>
+
+      <div id="path-ui" style="display:none;">
+        <div class="row2">
+          <div class="field"><label>Path Width (m)</label><input type="number" id="pathWidth" step="0.1" class="fi mono"></div>
+          <div class="field"><label>Path Length (m)</label><input type="number" id="pathLength" step="0.1" class="fi mono"></div>
+        </div>
+      </div>
+
+      <div id="ops-cycle-panel" style="display:none;" class="ops-panel">
+        <div class="ops-panel-hdr">&#9889; Live Cycle Data</div>
+        <div id="ops-cycle-content" class="ops-grid"></div>
+        <div id="ops-no-cycle" style="display:none;" class="ops-no-data">No active cycle on this unit.</div>
+        <button id="ops-open-ht-btn" onclick="openInHarvestTracker()" style="display:none;margin-top:7px;width:100%;" class="btn azure">&#128640; Open in Harvest Tracker</button>
+        <button id="ops-start-cycle-btn" onclick="openStartCycleModal()" style="display:none;margin-top:5px;width:100%;" class="btn">+ Start New Cycle</button>
+      </div>
+
+      <div id="start-cycle-modal" style="display:none;" class="mini-modal">
+        <div class="mini-modal-hdr">&#127807; Start New Cycle</div>
+        <label>Crop / Species</label><select id="sc-crop" class="fi"></select>
+        <label>Seeding Date</label><input type="date" id="sc-seed-date" class="fi">
+        <label>Expected Harvest Date</label><input type="date" id="sc-harvest-date" class="fi">
+        <label id="sc-area-lbl">Area (m&#178;) <span style="color:var(--ink3);">(auto from unit)</span></label><input type="number" id="sc-area" step="0.1" class="fi">
+        <div class="modal-btns" style="margin-top:4px;">
+          <button onclick="submitStartCycle()" class="btn primary" style="flex:1;">Save</button>
+          <button onclick="closeStartCycleModal()" class="btn" style="flex:1;">Cancel</button>
+        </div>
+        <div id="sc-status" class="modal-status"></div>
+      </div>
+
+      <button onclick="deleteSelected()" class="delete-btn">Delete Selected</button>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <div class="viewport-wrap">
+      <div id="container3d"></div>
+      <div class="vp-badge">3D &middot; Forest Studio</div>
+      <div class="vp-hint">drag to orbit &middot; scroll to zoom</div>
+    </div>
+  </div>
+</div>
 
-    <script>
+<div id="custom-confirm-modal" style="display:none;">
+  <div id="custom-confirm-msg" class="confirm-msg">Are you sure?</div>
+  <div class="confirm-btns">
+    <button id="custom-confirm-yes" class="btn danger-hover" style="flex:1;padding:8px 16px;">Yes</button>
+    <button onclick="closeCustomConfirm()" class="btn" style="flex:1;padding:8px 16px;">Cancel</button>
+  </div>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// Sun track click handler
+(function(){
+  function initTrack(){
+    const wrap=document.getElementById('sunTrackWrap');
+    const slider=document.getElementById('sunHourSlider');
+    const fill=document.getElementById('sunTrackFill');
+    const knob=document.getElementById('sunTrackKnob');
+    const lbl=document.getElementById('sunHourLabelTop');
+    if(!wrap||!slider) return;
+    function pct(v){ return ((v-6)/(20-6)*100).toFixed(1)+'%'; }
+    function syncTrack(){
+      const v=parseFloat(slider.value);
+      fill.style.width=pct(v); knob.style.left=pct(v);
+      const hh=Math.floor(v),mm=Math.round((v-hh)*60);
+      if(lbl) lbl.textContent='Time of Day \u00b7 '+String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+    }
+    slider.addEventListener('input', syncTrack);
+    wrap.addEventListener('click', function(e){
+      const r=wrap.getBoundingClientRect();
+      const frac=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+      slider.value=6+frac*14; syncTrack();
+      if(typeof updateSunFromSlider==='function') updateSunFromSlider();
+    });
+    syncTrack();
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',initTrack);
+  else initTrack();
+})();
+</script>
+
+
+<script>
         let objects = [];
         let selection = null;
         let zoom = 30, offsetX = 400, offsetY = 375;
@@ -783,22 +824,30 @@ def garden_planner():
         const cont3d = document.getElementById('container3d');
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(50, cont3d.clientWidth/cont3d.clientHeight, 0.1, 2000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.setSize(cont3d.clientWidth, cont3d.clientHeight);
         cont3d.appendChild(renderer.domElement);
         camera.position.set(15, 15, 15);
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         // --- 3D ENGINE RE-FIX ---
-        scene.background = new THREE.Color(0x05070A); // Match 2D background
-
-        // Ensure 3D Grid is permanent and added directly to scene
-        const gridHelper = new THREE.GridHelper(500, 100, 0x30363D, 0x1C2128);
+        scene.background = null;
+        cont3d.style.background = "linear-gradient(180deg, #1d2119 0%, #0d0f0b 100%)";
+        scene.fog = new THREE.Fog(0x14170f, 40, 110);
+        const gridHelper = new THREE.GridHelper(500, 250, 0x3d4831, 0x29301f);
+        gridHelper.position.y = 0.01;
         scene.add(gridHelper);
-
-        // Lights
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        const sun = new THREE.DirectionalLight(0xffffff, 0.5); 
-        sun.position.set(10, 20, 10); 
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(500,500),
+          new THREE.MeshStandardMaterial({color:0x141710,roughness:0.97,metalness:0}));
+        ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
+        scene.add(ground);
+        scene.add(new THREE.HemisphereLight(0x3e4a33, 0x14160f, 0.85));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.18));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.15);
+        sun.castShadow = true; sun.shadow.mapSize.set(2048,2048);
+        Object.assign(sun.shadow.camera,{left:-60,right:60,top:60,bottom:-60,near:1,far:200});
+        sun.shadow.bias=-0.0004; sun.shadow.radius=6;
         scene.add(sun);
 
         // Ensure camera can see the large grid (Far clipping plane at 2000)
@@ -844,19 +893,19 @@ def garden_planner():
             const toolSel = document.getElementById('toolSelect');
 
             if (isOpsMode) {
-                btn.innerText = "🛠️ MODIFY STRUCTURE";
-                btn.style.background = "#f1c40f";
-                status.innerText = "OPERATIONS MODE (LIVE DATA)";
-                status.style.color = "#f1c40f";
+                btn.textContent = "MODIFY STRUCTURE";
+                btn.style.background = "var(--accent-gold)"; btn.style.color = "var(--s0)";
+                status.textContent = "OPERATIONS MODE (LIVE DATA)";
+                status.style.color = "var(--accent-gold)";
                 toolSel.value = "select";
                 toolSel.disabled = true;
 
                 fetchAndApplyCycleData();  // Load live cycle data
             } else {
-                btn.innerText = "🚀 COMMIT TO OPERATIONS";
-                btn.style.background = "#2ecc71";
-                status.innerText = "ARCHITECT MODE (EDITABLE)";
-                status.style.color = "#2ecc71";
+                btn.textContent = "COMMIT TO OPERATIONS";
+                btn.style.background = "var(--accent)"; btn.style.color = "var(--s0)";
+                status.textContent = "ARCHITECT MODE (EDITABLE)";
+                status.style.color = "var(--accent)";
                 toolSel.disabled = false;
             }
             draw();
@@ -958,7 +1007,7 @@ def garden_planner():
 
                 const statusEl = document.getElementById('mode-status');
                 if (statusEl) {
-                    statusEl.innerText = `OPERATIONS MODE — ${cycles.length} active cycles, ${totalAssigned} units with data`;
+                    statusEl.style.color='var(--accent-gold)'; statusEl.textContent = `OPERATIONS MODE — ${cycles.length} active cycles, ${totalAssigned} units with data`;
                 }
                     if (selection && selection.type === 'rack') updateRackKPIs();
                 if (selection && selection.type === 'tank') updateTankKPIs();
@@ -996,7 +1045,7 @@ def garden_planner():
             const allBtns = document.querySelectorAll("button");
             let saveBtn = null;
             allBtns.forEach(b => { if (b.innerText.includes("SAVE TO CLOUD")) saveBtn = b; });
-            if (saveBtn) { saveBtn.innerText = "⏳ Saving..."; saveBtn.disabled = true; saveBtn.style.background = "#888"; }
+            if (saveBtn) { saveBtn.textContent = "Saving…"; saveBtn.disabled = true; saveBtn.style.opacity = "0.5"; }
 
             const payload = {
                 objects:     objects,
@@ -1049,17 +1098,16 @@ def garden_planner():
                     newId = postRows[0]?.id || "?";
                 }
                 if (saveBtn) {
-                    saveBtn.innerText = "✅ SAVED (ID " + newId + ")";
-                    saveBtn.style.background = "#2ecc71"; saveBtn.disabled = false;
-                    saveBtn.style.boxShadow = "";
-                    setTimeout(() => { saveBtn.innerText = "💾 SAVE TO CLOUD"; saveBtn.style.background = "#3498db"; }, 4000);
+                    saveBtn.textContent = "✅ Saved"; saveBtn.disabled = false;
+                    saveBtn.style.opacity = "1"; saveBtn.style.boxShadow = "";
+                    setTimeout(() => { saveBtn.textContent = "Save to Cloud"; }, 4000);
                 }
             } catch(err) {
                 console.error("Save error:", err);
                 if (saveBtn) {
                     saveBtn.innerText = "❌ " + err.message.substring(0,50);
                     saveBtn.style.background = "#e74c3c"; saveBtn.disabled = false;
-                    setTimeout(() => { saveBtn.innerText = "💾 SAVE TO CLOUD"; saveBtn.style.background = "#3498db"; }, 6000);
+                    setTimeout(() => { saveBtn.textContent = "Save to Cloud"; saveBtn.style.opacity = "1"; }, 6000);
                 }
             }
         }
@@ -1068,9 +1116,8 @@ def garden_planner():
             showShadows = !showShadows;
             const btn = document.getElementById('shadowBtn');
             if (btn) {
-                btn.innerText  = showShadows ? "☀️ SHADOWS ON" : "☀️ SHADOWS OFF";
-                btn.style.background = showShadows ? "#2c3e50" : "#1a1a1a";
-                btn.style.color      = showShadows ? "#f1c40f" : "#555";
+                btn.textContent = showShadows ? "Shadows On" : "Shadows Off";
+                btn.classList.toggle("on", showShadows);
             }
             draw();
         }
@@ -1082,7 +1129,7 @@ def garden_planner():
             _syncTimer = setTimeout(() => {
                 document.querySelectorAll("button").forEach(b => {
                     if (b.innerText.includes("SAVE TO CLOUD"))
-                        b.style.boxShadow = "0 0 10px rgba(52,152,219,0.9)";
+                        b.style.boxShadow = "0 0 0 2px var(--accent)";
                 });
             }, 800);
         }
@@ -1200,7 +1247,7 @@ def garden_planner():
             const c = objCycles[0];
             _currentOpsCycleId = c.id;
 
-            const statusColours = {seeding:'#5C7CFA', growing:'#2ecc71', ready:'#f1c40f', failed:'#e74c3c'};
+            const statusColours = {seeding:'#3f7d9c', growing:'#52a066', ready:'#cf9b3f', failed:'#c0573a'};
             const col = statusColours[c.status] || '#aaa';
             const today = new Date();
             let daysLeft = '—';
@@ -1290,7 +1337,7 @@ def garden_planner():
             const c = fishCycles[0];
             _currentFishCycleId = c.id;
 
-            const statusColours = {seeding:'#3498db', growing:'#2ecc71', ready:'#f1c40f', failed:'#e74c3c'};
+            const statusColours = {seeding:'#3f7d9c', growing:'#52a066', ready:'#cf9b3f', failed:'#c0573a'};
             const col = statusColours[c.status] || '#aaa';
             const today = new Date();
 
@@ -1398,7 +1445,7 @@ def garden_planner():
         async function submitStockTank() {
             const statusEl = document.getElementById('st-status');
             if (!SUPABASE_CONFIG || !FARM_DATA || !FARM_DATA.id) {
-                statusEl.textContent = '❌ No active farm.'; statusEl.style.color = '#e74c3c'; return;
+                statusEl.textContent = '❌ No active farm.'; statusEl.style.color = 'var(--danger)'; return;
             }
             const species     = document.getElementById('st-species').value;
             const stockDate   = document.getElementById('st-stock-date').value;
@@ -1408,10 +1455,10 @@ def garden_planner():
 
             if (!species || !stockDate) {
                 statusEl.textContent = '❌ Species and stocking date required.';
-                statusEl.style.color = '#e74c3c'; return;
+                statusEl.style.color = 'var(--danger)'; return;
             }
 
-            statusEl.textContent = '⏳ Saving...'; statusEl.style.color = '#aaa';
+            statusEl.textContent = '⏳ Saving...'; statusEl.style.color = 'var(--ink2)';
 
             const payload = {
                 farm_id:               FARM_DATA.id,
@@ -1436,11 +1483,11 @@ def garden_planner():
                     body: JSON.stringify(payload),
                 });
                 if (!resp.ok) throw new Error(await resp.text());
-                statusEl.textContent = '✅ Tank stocked!'; statusEl.style.color = '#2ecc71';
+                statusEl.textContent = '✅ Tank stocked!'; statusEl.style.color = 'var(--accent)';
                 setTimeout(() => { closeStockTankModal(); fetchAndApplyCycleData(); }, 1200);
             } catch(err) {
                 statusEl.textContent = '❌ ' + err.message.substring(0, 60);
-                statusEl.style.color = '#e74c3c';
+                statusEl.style.color = 'var(--danger)';
             }
         }
 
@@ -1510,7 +1557,7 @@ def garden_planner():
         async function submitStartCycle() {
             const statusEl = document.getElementById('sc-status');
             if (!SUPABASE_CONFIG || !FARM_DATA || !FARM_DATA.id) {
-                statusEl.textContent = '❌ No active farm.'; statusEl.style.color = '#e74c3c'; return;
+                statusEl.textContent = '❌ No active farm.'; statusEl.style.color = 'var(--danger)'; return;
             }
             const crop        = document.getElementById('sc-crop').value;
             const seedDate    = document.getElementById('sc-seed-date').value;
@@ -1537,10 +1584,10 @@ def garden_planner():
             const rackName    = selection ? selection.name : null;
 
             if (!crop || !seedDate) {
-                statusEl.textContent = '❌ Crop and seeding date required.'; statusEl.style.color = '#e74c3c'; return;
+                statusEl.textContent = '❌ Crop and seeding date required.'; statusEl.style.color = 'var(--danger)'; return;
             }
 
-            statusEl.textContent = '⏳ Saving...'; statusEl.style.color = '#aaa';
+            statusEl.textContent = '⏳ Saving...'; statusEl.style.color = 'var(--ink2)';
 
             const payload = {
                 farm_id:                FARM_DATA.id,
@@ -1569,7 +1616,7 @@ def garden_planner():
                 if (!resp.ok) throw new Error(await resp.text());
                 const rows = await resp.json();
                 const newId = rows[0]?.id;
-                statusEl.textContent = '✅ Cycle started!'; statusEl.style.color = '#2ecc71';
+                statusEl.textContent = '✅ Cycle started!'; statusEl.style.color = 'var(--accent)';
 
                 // If rack has layers, also insert rack_layer_assignments for all layers
                 if (newId && rackName && selection && selection.layers > 0) {
@@ -1608,7 +1655,7 @@ def garden_planner():
 
             } catch(err) {
                 statusEl.textContent = '❌ ' + err.message.substring(0, 60);
-                statusEl.style.color = '#e74c3c';
+                statusEl.style.color = 'var(--danger)';
             }
         }
 
@@ -1676,9 +1723,9 @@ def garden_planner():
                 const btn = document.getElementById('rtype-'+t);
                 if (!btn) return;
                 const isActive = t === subtype;
-                btn.style.background = isActive ? '#1e3a2a' : '#222';
-                btn.style.color      = isActive ? RACK_TYPES[t].color2d : '#888';
-                btn.style.borderColor = isActive ? RACK_TYPES[t].color2d : '#444';
+                btn.classList.toggle('rack-btn-active', isActive);
+                btn.style.color = isActive ? RACK_TYPES[t].color2d : '';
+                btn.style.borderColor = isActive ? RACK_TYPES[t].color2d : '';
             });
             // Show/hide subtype-specific controls
             document.getElementById('rack-layer-controls').style.display = ['standard'].includes(subtype) ? 'block' : 'none';
@@ -1738,6 +1785,23 @@ def garden_planner():
             if (descEl) descEl.innerText = RACK_TYPES[subtype]?.desc || '';
         }
         window.setRackSubtype = setRackSubtype;
+        function setTowerShape(shape) {
+            if (selection && selection.type === 'rack' && selection.rackType === 'tower') {
+                selection.towerShape = shape;
+                sync3D(); draw();
+            }
+            const btnR = document.getElementById('tshape-round');
+            const btnRec = document.getElementById('tshape-rect');
+            if (!btnR || !btnRec) return;
+            if (shape === 'rect') {
+                btnRec.style.background = 'rgba(82,160,102,0.15)'; btnRec.style.color = '#52a066'; btnRec.style.borderColor = '#52a066';
+                btnR.style.background = '#222'; btnR.style.color = '#888'; btnR.style.borderColor = '#444';
+            } else {
+                btnR.style.background = 'rgba(82,160,102,0.15)'; btnR.style.color = '#52a066'; btnR.style.borderColor = '#52a066';
+                btnRec.style.background = '#222'; btnRec.style.color = '#888'; btnRec.style.borderColor = '#444';
+            }
+        }
+        window.setTowerShape = setTowerShape;
 
         function duplicateSelected() {
             if (!selection) return;
@@ -1880,7 +1944,7 @@ def garden_planner():
                 const margin = revForMargin > 0 ? ((revForMargin - energyCost) / revForMargin * 100) : 0;
                 document.getElementById('kpi-energy').innerText       = '€' + Math.round(energyCost).toLocaleString() + '/yr';
                 document.getElementById('kpi-margin').innerText       = (margin > 0 ? '+' : '') + margin.toFixed(0) + '%';
-                document.getElementById('kpi-margin').style.color     = margin > 30 ? '#2ecc71' : margin > 0 ? '#f1c40f' : '#e74c3c';
+                document.getElementById('kpi-margin').style.color     = margin > 30 ? 'var(--accent)' : margin > 0 ? 'var(--accent-gold)' : 'var(--danger)';
             }
 
             // ── VS MODEL comparison (pro-rated from model_snapshot) ───────────
@@ -1900,7 +1964,7 @@ def garden_planner():
                     document.getElementById('kpi-model-yield').innerText  = Math.round(mKg).toLocaleString() + ' kg/yr';
                     document.getElementById('kpi-model-rev').innerText    = '€' + Math.round(mRev).toLocaleString() + '/yr';
                     document.getElementById('kpi-delta-rev').innerText    = (deltaRev >= 0 ? '+' : '') + '€' + Math.round(deltaRev).toLocaleString();
-                    document.getElementById('kpi-delta-rev').style.color  = deltaRev >= 0 ? '#2ecc71' : '#e74c3c';
+                    document.getElementById('kpi-delta-rev').style.color  = deltaRev >= 0 ? 'var(--accent)' : 'var(--danger)';
                 } else {
                     ['kpi-model-canopy','kpi-model-yield','kpi-model-rev','kpi-delta-rev']
                         .forEach(id => { const el = document.getElementById(id); if(el) el.innerText = '—'; });
@@ -2019,7 +2083,7 @@ def garden_planner():
                     document.getElementById('kpi-model-fish-yield').innerText = Math.round(mKg).toLocaleString() + ' kg/yr';
                     document.getElementById('kpi-model-fish-rev').innerText   = '€' + Math.round(mRev).toLocaleString() + '/yr';
                     document.getElementById('kpi-delta-fish-rev').innerText   = (deltaRev >= 0 ? '+' : '') + '€' + Math.round(deltaRev).toLocaleString();
-                    document.getElementById('kpi-delta-fish-rev').style.color = deltaRev >= 0 ? '#2ecc71' : '#e74c3c';
+                    document.getElementById('kpi-delta-fish-rev').style.color = deltaRev >= 0 ? 'var(--accent)' : 'var(--danger)';
                 } else {
                     ['kpi-model-tank-vol','kpi-model-fish-yield','kpi-model-fish-rev','kpi-delta-fish-rev']
                         .forEach(id => { const el = document.getElementById(id); if(el) el.innerText = '—'; });
@@ -2591,7 +2655,11 @@ def garden_planner():
                     }
                     document.getElementById('objLayers').value = selection.layers;
                     document.getElementById('layerSpacing').value = selection.spacing || 0.6;
+                    if(selection.rackType === 'tower') setTowerShape(selection.towerShape || 'round');
                     document.getElementById('towerPlants').value  = selection.layers || 20;
+                    if (selection.rackType === 'tower') {
+                        setTimeout(() => setTowerShape(selection.towerShape || 'round'), 15);
+                    }
                     setRackSubtype(rt);
                     updateRackKPIs();
                     if (isOpsMode) { showOpsCyclePanel(selection); hideTankCyclePanel(); }
@@ -2730,8 +2798,8 @@ def garden_planner():
             });
 
             ctx.setLineDash([]);
-            ctx.strokeStyle = "#e74c3c";
-            ctx.fillStyle = "#e74c3c";
+            ctx.strokeStyle = "#c0573a";
+            ctx.fillStyle = "#c0573a";
 
             if (closestX && minDistX < 20) {
                 const px1 = closestX.x, px2 = closestX.x + closestX.w;
@@ -2774,15 +2842,20 @@ def garden_planner():
             ctx.restore();
         }
 
+        function positionSun(){
+          const el=sunElevation*Math.PI/180,az=sunAzimuth*Math.PI/180,R=60;
+          sun.position.set(R*Math.cos(el)*Math.sin(az),Math.max(R*Math.sin(el),2),-R*Math.cos(el)*Math.cos(az));
+          sun.visible=showShadows&&sunElevation>2;
+        }
         function draw() {
             ctx.globalAlpha = 1.0;
-            ctx.fillStyle = "#05070A"; // Deep Navy Background
+            ctx.fillStyle = "#0f1310";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             if (isOpsMode) ctx.globalAlpha = 0.5;
 
             // Grid
-            ctx.strokeStyle = "#1C2128"; 
+            ctx.strokeStyle = "#1d241c"; 
             ctx.lineWidth = 1;
             for(let i = offsetX % zoom; i < canvas.width; i += zoom){ ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke(); }
             for(let j = offsetY % zoom; j < canvas.height; j += zoom){ ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(canvas.width, j); ctx.stroke(); }
@@ -2810,7 +2883,7 @@ def garden_planner():
                     const sdy =  Math.cos(azRad) * shadowLenPx;
                     ctx.save();
                     ctx.globalAlpha = 0.65;
-                    ctx.fillStyle = "#1a2850";
+                    ctx.fillStyle = "rgba(0,0,0,0.50)";
                     // Minkowski sum of footprint rect and shadow vector = correct shadow for any direction.
                     // Draw 4 edge quads + the shifted footprint.
                     [
@@ -2843,7 +2916,7 @@ def garden_planner():
                     const ry2 = o.endY * zoom + offsetY;
                     const dist = Math.sqrt(Math.pow(o.endX - o.startX, 2) + Math.pow(o.endY - o.startY, 2));
 
-                    ctx.strokeStyle = isSel ? "#3498db" : "#e74c3c";
+                    ctx.strokeStyle = isSel ? "#3f7d9c" : "#c0573a";
                     ctx.lineWidth = 2;
                     ctx.setLineDash([4, 4]);
                     ctx.beginPath();
@@ -2996,7 +3069,7 @@ def garden_planner():
                     const dx = (window.lastWorld.x >= rectStart.x) ? 1 : -1, dy = (window.lastWorld.y >= rectStart.y) ? 1 : -1;
                     const rw_px = ew * zoom * dx, rh_px = eh * zoom * dy;
 
-                    ctx.strokeStyle = isSelectTool ? "#3498db" : "#FFD43B"; 
+                    ctx.strokeStyle = isSelectTool ? "#3f7d9c" : "#e8c14e"; 
                     ctx.setLineDash([5,5]);
                     ctx.strokeRect(rx, ry, rw_px, rh_px);
                     ctx.setLineDash([]);
@@ -3012,10 +3085,10 @@ def garden_planner():
 
                         ctx.fillRect(labelX, labelY, 100, 40);
                         
-                        ctx.fillStyle = "#FFD43B";
+                        ctx.fillStyle = "#e8c14e";
                         ctx.font = "bold 11px Inter";
                         ctx.fillText(`${ew.toFixed(2)}m x ${eh.toFixed(2)}m`, labelX + 8, labelY + 18);
-                        ctx.fillStyle = "#40C057";
+                        ctx.fillStyle = "#52a066";
                         ctx.fillText(`${(ew * eh).toFixed(2)} m²`, labelX + 8, labelY + 32);
                     }
                 }
@@ -3041,6 +3114,7 @@ def garden_planner():
             drawCycleOverlay();
             drawOverlays();
             ctx.globalAlpha = 1.0;
+            positionSun();
         }
 
         function sync3D() {
@@ -3062,12 +3136,9 @@ def garden_planner():
 
                     // PENCIL DRAW EFFECT: Add clear outlines
                     const edges = new THREE.EdgesGeometry(geom);
-                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xFFFFFF, linewidth: 2 }));
+                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x93c79e, transparent:true, opacity:0.5 }));
 
-                    const mat = new THREE.MeshPhongMaterial({ 
-                        color: bType === 'warehouse' ? 0x5C7CFA : 0x00d4ff, 
-                        transparent: true, opacity: 0.1, shininess: 100 
-                    });
+                    const mat = new THREE.MeshStandardMaterial({ color: bType==='warehouse'?0x5b8fb0:0x6fb0cf, roughness:0.3, metalness:0.1, transparent:true, opacity:(bType==='greenhouse'||bType==='polytunnel')?0.14:0.08 });
                     const mesh = new THREE.Mesh(geom, mat);
                     
                     const posY = (bType === 'polytunnel') ? 0 : obj.height/2;
@@ -3078,27 +3149,93 @@ def garden_planner():
                     objectGroup.add(line); // Add the "pencil" outline
                 } 
                 else if (obj.type === 'tank') {
-                    // NEW: Blue translucent water volume with a dark frame
-                    const geom = new THREE.BoxGeometry(obj.w, obj.height, obj.h);
-                    const mat = new THREE.MeshPhongMaterial({ color: 0x0969da, transparent: true, opacity: 0.6 });
-                    const mesh = new THREE.Mesh(geom, mat);
-                    mesh.position.set(obj.x + obj.w/2, obj.height/2, obj.y + obj.h/2);
-                    
-                    const edges = new THREE.EdgesGeometry(geom);
-                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x3498db }));
-                    line.position.copy(mesh.position);
-                    
-                    objectGroup.add(mesh);
-                    objectGroup.add(line);
+                    const tw = obj.w, td = obj.height || 1.5, tl = obj.h;
+                    const cx = obj.x + tw/2, cz = obj.y + tl/2;
+                    const wall = 0.04; // wall thickness
+
+                    // ── Structural frame (dark metal) ─────────────────────────
+                    const frameMat = new THREE.MeshStandardMaterial({color:0x3a4038, roughness:0.65, metalness:0.35});
+                    // 4 corner uprights
+                    [[0,0],[tw,0],[0,tl],[tw,tl]].forEach(([fx,fz]) => {
+                        const fg = new THREE.BoxGeometry(wall, td + wall, wall);
+                        const fm = new THREE.Mesh(fg, frameMat);
+                        fm.position.set(obj.x + fx, td/2, obj.y + fz);
+                        fm.castShadow = true;
+                        objectGroup.add(fm);
+                    });
+                    // Bottom rim
+                    const rimMat = new THREE.MeshStandardMaterial({color:0x4a524a, roughness:0.6, metalness:0.3});
+                    [[cx, 0, obj.y,      tw, wall, wall],
+                     [cx, 0, obj.y + tl, tw, wall, wall],
+                     [obj.x,      0, cz, wall, wall, tl],
+                     [obj.x + tw, 0, cz, wall, wall, tl]].forEach(([px,py,pz,rw,rh,rl]) => {
+                        const rg = new THREE.BoxGeometry(rw, rh, rl);
+                        const rm = new THREE.Mesh(rg, rimMat);
+                        rm.position.set(px, py, pz);
+                        objectGroup.add(rm);
+                    });
+                    // Top rim
+                    [[cx, td, obj.y,      tw + wall, wall, wall],
+                     [cx, td, obj.y + tl, tw + wall, wall, wall],
+                     [obj.x,      td, cz, wall, wall, tl],
+                     [obj.x + tw, td, cz, wall, wall, tl]].forEach(([px,py,pz,rw,rh,rl]) => {
+                        const rg = new THREE.BoxGeometry(rw, rh, rl);
+                        const rm = new THREE.Mesh(rg, rimMat);
+                        rm.position.set(px, py, pz);
+                        objectGroup.add(rm);
+                    });
+
+                    // ── Glass walls (4 translucent panels) ────────────────────
+                    const glassMat = new THREE.MeshPhysicalMaterial({
+                        color: 0x4f97c0, roughness: 0.05, metalness: 0,
+                        transparent: true, opacity: 0.22,
+                        transmission: 0.78, thickness: 0.3,
+                        side: THREE.DoubleSide
+                    });
+                    // Front & back
+                    [[obj.y, false],[obj.y + tl, false]].forEach(([pz, _]) => {
+                        const pg = new THREE.BoxGeometry(tw - wall, td - wall*2, wall * 0.5);
+                        const pm = new THREE.Mesh(pg, glassMat);
+                        pm.position.set(cx, td/2, pz);
+                        objectGroup.add(pm);
+                    });
+                    // Left & right
+                    [[obj.x, true],[obj.x + tw, true]].forEach(([px, _]) => {
+                        const pg = new THREE.BoxGeometry(wall * 0.5, td - wall*2, tl - wall);
+                        const pm = new THREE.Mesh(pg, glassMat);
+                        pm.position.set(px, td/2, cz);
+                        objectGroup.add(pm);
+                    });
+
+                    // ── Water fill (deeper tint inside) ───────────────────────
+                    const waterMat = new THREE.MeshPhysicalMaterial({
+                        color: 0x2c5a78, roughness: 0.0, metalness: 0,
+                        transparent: true, opacity: 0.18, transmission: 0.9,
+                    });
+                    const wg = new THREE.BoxGeometry(tw - wall*2, td * 0.88, tl - wall*2);
+                    const wm = new THREE.Mesh(wg, waterMat);
+                    wm.position.set(cx, td * 0.44 + wall, cz);
+                    objectGroup.add(wm);
+
+                    // ── Water surface ──────────────────────────────────────────
+                    const surfMat = new THREE.MeshStandardMaterial({
+                        color: 0x3a7fa8, roughness: 0.05, metalness: 0.1,
+                        transparent: true, opacity: 0.55
+                    });
+                    const sg = new THREE.PlaneGeometry(tw - wall*2, tl - wall*2);
+                    const sm = new THREE.Mesh(sg, surfMat);
+                    sm.rotation.x = -Math.PI / 2;
+                    sm.position.set(cx, td * 0.92, cz);
+                    objectGroup.add(sm);
                 } else if (obj.type === 'equip') {
                     const geom = new THREE.BoxGeometry(obj.w, obj.height, obj.h);
-                    const color = obj.subType === 'hvac' ? 0xff922b : 0x868e96;
-                    const mat = new THREE.MeshPhongMaterial({ color: color });
+                    const color = obj.subType === 'hvac' ? 0xc0734a : obj.subType === 'biofilter' ? 0x4a7a4a : 0x6b7570;
+                    const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.6, metalness: 0.2 });
                     const mesh = new THREE.Mesh(geom, mat);
                     mesh.position.set(obj.x + obj.w/2, obj.height/2, obj.y + obj.h/2);
                     
                     const edges = new THREE.EdgesGeometry(geom);
-                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff }));
+                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x93c79e, transparent:true, opacity:0.5 }));
                     line.position.copy(mesh.position);
                     
                     objectGroup.add(mesh);
@@ -3106,67 +3243,165 @@ def garden_planner():
                 } else if (obj.type === 'rack') {
                     const spacing  = obj.spacing || 0.6;
                     const rType    = obj.rackType || 'standard';
-                    const baseColor = {standard:0x40C057, wall:0x74c0fc, tower:0xffd43b, bench:0xcc5de8}[rType] || 0x40C057;
+                    const baseColor = {standard:0x52a066, wall:0x3f7d9c, tower:0xcf9b3f, bench:0x8d6a9f}[rType] || 0x52a066;
                     // Per-layer status colours (from cycle data)
-                    const statusColors = {seeding:0x3498db, growing:0x2ecc71, ready:0xf1c40f, failed:0xe74c3c};
+                    const statusColors = {seeding:0x3f7d9c, growing:0x52a066, ready:0xcf9b3f, failed:0xc0573a};
 
                     if (rType === 'tower') {
-                        // Tower: vertical cylinder with plant nodes
-                        const poleG = new THREE.CylinderGeometry(0.04, 0.04, obj.height || 2.0, 8);
-                        const poleM = new THREE.MeshPhongMaterial({color: 0x888888});
-                        const pole  = new THREE.Mesh(poleG, poleM);
-                        pole.position.set(obj.x + obj.w/2, (obj.height||2.0)/2, obj.y + obj.h/2);
-                        objectGroup.add(pole);
-                        // Plant nodes as small spheres at regular intervals
-                        const nPlants = obj.layers || 20;
-                        const stepH   = (obj.height || 2.0) / nPlants;
+                        // Professional tower rack: structural frame + growing panels
+                        const tH      = obj.height || 2.0;
+                        const nPlants = obj.layers  || 20;
+                        const cx      = obj.x + obj.w / 2;
+                        const cz      = obj.y + obj.h / 2;
+                        const isRect  = obj.towerShape === 'rect';
+
+                        // ── Structural frame ──────────────────────────────────
+                        const frameR  = isRect ? null : 0.035;
+                        const frameMat = new THREE.MeshStandardMaterial({color:0x4a4e48, roughness:0.7, metalness:0.15});
+                        if (isRect) {
+                            // 4 corner posts for rectangular tower
+                            const hw = (obj.w || 0.4) / 2 - 0.04;
+                            const hd = (obj.h || 0.4) / 2 - 0.04;
+                            [[-hw,-hd],[hw,-hd],[hw,hd],[-hw,hd]].forEach(([dx,dz]) => {
+                                const pg = new THREE.BoxGeometry(0.04, tH, 0.04);
+                                const p  = new THREE.Mesh(pg, frameMat);
+                                p.position.set(cx+dx, tH/2, cz+dz);
+                                p.castShadow = true;
+                                objectGroup.add(p);
+                            });
+                            // Horizontal cross-braces every ~0.5m
+                            const nBraces = Math.max(2, Math.round(tH / 0.5));
+                            for (let b = 0; b <= nBraces; b++) {
+                                const by = (b / nBraces) * tH;
+                                const bg1 = new THREE.BoxGeometry(obj.w - 0.04, 0.025, 0.025);
+                                const bm1 = new THREE.Mesh(bg1, frameMat);
+                                bm1.position.set(cx, by, cz - (obj.h||0.4)/2 + 0.02);
+                                objectGroup.add(bm1);
+                                const bm2 = bm1.clone();
+                                bm2.position.z = cz + (obj.h||0.4)/2 - 0.02;
+                                objectGroup.add(bm2);
+                            }
+                        } else {
+                            // Round: central pole + 3 outer guide rails
+                            const poleG = new THREE.CylinderGeometry(0.03, 0.03, tH, 12);
+                            const pole  = new THREE.Mesh(poleG, frameMat);
+                            pole.position.set(cx, tH/2, cz);
+                            pole.castShadow = true;
+                            objectGroup.add(pole);
+                            const railR = Math.min(obj.w, obj.h) * 0.38;
+                            for (let r = 0; r < 3; r++) {
+                                const ang = (r / 3) * Math.PI * 2;
+                                const rg  = new THREE.CylinderGeometry(0.012, 0.012, tH, 6);
+                                const rm  = new THREE.Mesh(rg, frameMat);
+                                rm.position.set(cx + railR * Math.cos(ang), tH/2, cz + railR * Math.sin(ang));
+                                objectGroup.add(rm);
+                            }
+                        }
+
+                        // ── Growing panels / net cups ─────────────────────────
+                        const panelStep = (tH - 0.25) / Math.max(1, nPlants - 1);
+                        const panelR    = Math.min(obj.w, obj.h) * 0.42;
                         for (let i = 0; i < nPlants; i++) {
                             const layerStatus = obj.layerStatus?.[i] || '';
                             const col  = statusColors[layerStatus] || baseColor;
-                            const sg   = new THREE.SphereGeometry(0.06, 6, 6);
-                            const sm   = new THREE.MeshPhongMaterial({color: col});
-                            const s    = new THREE.Mesh(sg, sm);
-                            const angle = (i / nPlants) * Math.PI * 4; // spiral
-                            s.position.set(
-                                obj.x + obj.w/2 + 0.12 * Math.cos(angle),
-                                i * stepH + 0.2,
-                                obj.y + obj.h/2 + 0.12 * Math.sin(angle)
-                            );
-                            objectGroup.add(s);
+                            const panelMat = new THREE.MeshStandardMaterial({
+                                color: col, roughness:0.45, metalness:0.05,
+                                emissive: col, emissiveIntensity: 0.22,
+                                transparent:true, opacity:0.92
+                            });
+                            const yPos = 0.15 + i * panelStep;
+                            if (isRect) {
+                                // Rectangular: alternating side panels
+                                const side  = i % 2 === 0;
+                                const pW    = (side ? obj.w : obj.h) * 0.72;
+                                const pg    = new THREE.BoxGeometry(side ? pW : 0.018, 0.055, side ? 0.018 : pW);
+                                const pm    = new THREE.Mesh(pg, panelMat);
+                                pm.position.set(cx, yPos, cz);
+                                pm.castShadow = true;
+                                objectGroup.add(pm);
+                            } else {
+                                // Round: small discs fanned around the pole
+                                const ang  = (i / nPlants) * Math.PI * 2 * 2.5; // ~2.5 rotations
+                                const dg   = new THREE.CylinderGeometry(0.065, 0.065, 0.018, 10);
+                                const dm   = new THREE.Mesh(dg, panelMat);
+                                dm.position.set(cx + panelR * Math.cos(ang), yPos, cz + panelR * Math.sin(ang));
+                                dm.castShadow = true;
+                                objectGroup.add(dm);
+                                // Thin stem connecting disc to pole/rail
+                                const stemLen = panelR - 0.03;
+                                const sg2 = new THREE.CylinderGeometry(0.005, 0.005, stemLen, 4);
+                                const sm2 = new THREE.Mesh(sg2, frameMat);
+                                sm2.rotation.z = Math.PI / 2;
+                                sm2.position.set(
+                                    cx + (panelR/2) * Math.cos(ang), yPos,
+                                    cz + (panelR/2) * Math.sin(ang)
+                                );
+                                sm2.lookAt(cx + panelR * Math.cos(ang), yPos, cz + panelR * Math.sin(ang));
+                                objectGroup.add(sm2);
+                            }
                         }
+
+                        // ── Top cap ───────────────────────────────────────────
+                        const capG = isRect
+                            ? new THREE.BoxGeometry(obj.w, 0.03, obj.h)
+                            : new THREE.CylinderGeometry(Math.min(obj.w,obj.h)*0.48, Math.min(obj.w,obj.h)*0.48, 0.03, 16);
+                        const capM = new THREE.Mesh(capG, frameMat);
+                        capM.position.set(cx, tH + 0.015, cz);
+                        objectGroup.add(capM);
                     } else if (rType === 'wall') {
                         // Wall rack: single vertical growing surface
                         const layerStatus = obj.layerStatus?.[0] || obj.cycleStatus || '';
                         const col = statusColors[layerStatus] || baseColor;
                         const panelG = new THREE.BoxGeometry(obj.w || 0.3, obj.height || 2.4, obj.h);
-                        const panelM = new THREE.MeshPhongMaterial({color: col, transparent:true, opacity:0.85});
+                        const panelM = new THREE.MeshStandardMaterial({color: col, roughness:0.5, metalness:0.05, transparent:true, opacity:0.95, emissive: col, emissiveIntensity:0.28});
                         const panel  = new THREE.Mesh(panelG, panelM);
                         panel.position.set(obj.x + (obj.w||0.3)/2, (obj.height||2.4)/2, obj.y + obj.h/2);
                         objectGroup.add(panel);
                         const eg = new THREE.EdgesGeometry(panelG);
-                        const el = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({color:0xffffff,linewidth:1}));
+                        const el = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({color:0x93c79e, transparent:true, opacity:0.5}));
                         el.position.copy(panel.position);
                         objectGroup.add(el);
                     } else if (rType === 'bench') {
-                        // Single bench: legs + surface
-                        const legH = obj.height || 0.9;
-                        [[0.1,0.1],[obj.w-0.1,0.1],[0.1,obj.h-0.1],[obj.w-0.1,obj.h-0.1]].forEach(([lx,ly]) => {
-                            const lg = new THREE.CylinderGeometry(0.03,0.03,legH,6);
-                            const lm = new THREE.MeshPhongMaterial({color:0x555555});
-                            const l  = new THREE.Mesh(lg, lm);
+                        // Single bench: legs + surface — height-aware
+                        const legH = parseFloat(obj.height) || 0.9;
+                        const lInset = Math.min(0.12, obj.w * 0.12, obj.h * 0.12);
+                        const legMat = new THREE.MeshStandardMaterial({color:0x3a3e38, roughness:0.75, metalness:0.1});
+                        [[lInset, lInset],[obj.w-lInset, lInset],[lInset, obj.h-lInset],[obj.w-lInset, obj.h-lInset]].forEach(([lx,ly]) => {
+                            const lg = new THREE.BoxGeometry(0.04, legH, 0.04);
+                            const l  = new THREE.Mesh(lg, legMat);
                             l.position.set(obj.x+lx, legH/2, obj.y+ly);
+                            l.castShadow = true;
                             objectGroup.add(l);
                         });
+                        // Cross-braces at 1/3 height for realism
+                        const braceMat = new THREE.MeshStandardMaterial({color:0x2e322c, roughness:0.8, metalness:0.1});
+                        const braceY = legH * 0.3;
+                        [[obj.x + lInset, obj.x + obj.w - lInset, obj.y + lInset],
+                         [obj.x + lInset, obj.x + obj.w - lInset, obj.y + obj.h - lInset]].forEach(([x1,x2,pz]) => {
+                            const bg = new THREE.BoxGeometry(x2-x1, 0.025, 0.025);
+                            const bm = new THREE.Mesh(bg, braceMat);
+                            bm.position.set((x1+x2)/2, braceY, pz);
+                            objectGroup.add(bm);
+                        });
+                        [[obj.x + lInset, obj.y + lInset, obj.y + obj.h - lInset],
+                         [obj.x + obj.w - lInset, obj.y + lInset, obj.y + obj.h - lInset]].forEach(([px,z1,z2]) => {
+                            const bg = new THREE.BoxGeometry(0.025, 0.025, z2-z1);
+                            const bm = new THREE.Mesh(bg, braceMat);
+                            bm.position.set(px, braceY, (z1+z2)/2);
+                            objectGroup.add(bm);
+                        });
+                        // Surface
                         const layerStatus = obj.layerStatus?.[0] || obj.cycleStatus || '';
                         const topCol = statusColors[layerStatus] || baseColor;
-                        const tg = new THREE.BoxGeometry(obj.w, 0.04, obj.h);
-                        const tm = new THREE.MeshPhongMaterial({color: topCol, transparent:true, opacity:0.85});
+                        const tg = new THREE.BoxGeometry(obj.w, 0.045, obj.h);
+                        const tm = new THREE.MeshStandardMaterial({color: topCol, roughness:0.5, metalness:0.05,
+                            transparent:true, opacity:0.95, emissive: topCol, emissiveIntensity:0.22});
                         const top = new THREE.Mesh(tg, tm);
                         top.position.set(obj.x+obj.w/2, legH, obj.y+obj.h/2);
+                        top.castShadow = true;
                         objectGroup.add(top);
-                        // Edges
                         const eg = new THREE.EdgesGeometry(tg);
-                        const el = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({color:0xffffff,linewidth:1}));
+                        const el = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({color:0x93c79e, transparent:true, opacity:0.5}));
                         el.position.copy(top.position);
                         objectGroup.add(el);
                     } else {
@@ -3175,7 +3410,7 @@ def garden_planner():
                         const postH = obj.height || (spacing * obj.layers + 0.3);
                         [[0.04,0.04],[obj.w-0.04,0.04],[0.04,obj.h-0.04],[obj.w-0.04,obj.h-0.04]].forEach(([px,py]) => {
                             const pg = new THREE.CylinderGeometry(0.025,0.025,postH,6);
-                            const pm = new THREE.MeshPhongMaterial({color:0x555555});
+                            const pm = new THREE.MeshStandardMaterial({color:0x3a3e38, roughness:0.8});
                             const p  = new THREE.Mesh(pg, pm);
                             p.position.set(obj.x+px, postH/2, obj.y+py);
                             objectGroup.add(p);
@@ -3185,28 +3420,28 @@ def garden_planner():
                             const layerStatus = obj.layerStatus?.[i] || '';
                             const col  = statusColors[layerStatus] || baseColor;
                             const shelfG = new THREE.BoxGeometry(obj.w, 0.04, obj.h);
-                            const shelfM = new THREE.MeshPhongMaterial({color: col, transparent:true, opacity:0.85});
+                            const shelfM = new THREE.MeshStandardMaterial({color: col, roughness:0.5, metalness:0.05, transparent:true, opacity:0.95, emissive: col, emissiveIntensity:0.28});
                             const shelf  = new THREE.Mesh(shelfG, shelfM);
                             const yPos = 0.2 + i * ((postH - 0.3) / Math.max(1, obj.layers));
                             shelf.position.set(obj.x+obj.w/2, yPos, obj.y+obj.h/2);
                             objectGroup.add(shelf);
                             // Shelf edge highlight
                             const eg = new THREE.EdgesGeometry(shelfG);
-                            const el = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({color:0xffffff,linewidth:1}));
+                            const el = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({color:0x93c79e, transparent:true, opacity:0.5}));
                             el.position.copy(shelf.position);
                             objectGroup.add(el);
                         }
                     }
                 } else if (obj.type === 'path') {
                     const geom = new THREE.BoxGeometry(obj.w, 0.02, obj.h);
-                    const mat = new THREE.MeshPhongMaterial({ color: 0x212529 });
+                    const mat = new THREE.MeshStandardMaterial({ color: 0x2a2d27, roughness: 0.9 });
                     const mesh = new THREE.Mesh(geom, mat);
                     mesh.position.set(obj.x + obj.w/2, 0.01, obj.y + obj.h/2);
                     objectGroup.add(mesh);
                 } else if (obj.type === 'plot') {
                     const geom = new THREE.PlaneGeometry(obj.w, obj.h);
                     const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(obj.w, 0.01, obj.h));
-                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xf03e3e, dashSize: 1, gapSize: 0.5 }));
+                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xc0573a, transparent:true, opacity:0.7 }));
                     line.position.set(obj.x + obj.w/2, 0.01, obj.y + obj.h/2);
                     objectGroup.add(line);
                 } else if (obj.type === 'measure') {
@@ -3214,7 +3449,7 @@ def garden_planner():
                     points.push(new THREE.Vector3(obj.startX, 0.02, obj.startY));
                     points.push(new THREE.Vector3(obj.endX, 0.02, obj.endY));
                     const geom = new THREE.BufferGeometry().setFromPoints(points);
-                    const line = new THREE.Line(geom, new THREE.LineBasicMaterial({ color: 0xe74c3c, linewidth: 2 }));
+                    const line = new THREE.Line(geom, new THREE.LineBasicMaterial({ color: 0xc0573a, linewidth: 2 }));
                     objectGroup.add(line);
                 }
             });
