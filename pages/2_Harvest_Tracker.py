@@ -1461,6 +1461,101 @@ with tab2:
             _is_open_cycle = (_lc_mode == "🌱 Open new cycle (seeding)")
             if not _is_open_cycle and h_kg <= 0:
                 st.error("Please enter a kg amount greater than 0.")
+            elif _is_open_cycle and h_zone:
+                # Block duplicate active cycles on the same zone/rack
+                try:
+                    _dup_resp = (
+                        supabase.table("harvest_logs")
+                        .select("id, crop, status")
+                        .eq("farm_id", active_farm["id"])
+                        .eq("zone", h_zone)
+                        .in_("status", ["seeding", "growing", "ready"])
+                        .execute()
+                    )
+                    _dup_cycles = _dup_resp.data or []
+                except Exception:
+                    _dup_cycles = []
+                if _dup_cycles:
+                    _dup_crops = ", ".join(
+                        f"{d['crop']} ({d['status']})" for d in _dup_cycles
+                    )
+                    st.error(
+                        f"⚠️ **{h_zone}** already has an active cycle: **{_dup_crops}**. "
+                        "Close or delete the existing cycle before opening a new one on the same zone. "
+                        "This prevents double-counting canopy area in the Space Planner."
+                    )
+                else:
+                    try:
+                        _insert_data = {
+                            "farm_id":          active_farm["id"],
+                            "crop":             h_crop,
+                            "zone":             h_zone or None,
+                            "seeding_date":     str(h_cycle_start) if h_cycle_start else None,
+                            "cycle_start_date": str(h_cycle_start) if h_cycle_start else None,
+                            "area_m2":          h_area if h_area > 0 else None,
+                            "notes":            h_notes or None,
+                            "observations":     [],
+                        }
+                        if _is_open_cycle:
+                            # date column is NOT NULL — use seeding date as placeholder.
+                            # It will be overwritten with the actual harvest date when
+                            # the cycle is closed via the Active Cycles tab.
+                            _insert_data["status"] = "seeding"
+                            _insert_data["date"]   = str(h_cycle_start) if h_cycle_start else str(date.today())
+                            if _exp_harvest:
+                                _insert_data["expected_harvest_date"] = str(_exp_harvest)
+                            elif h_cycle_start and _lc_crop_days:
+                                _insert_data["expected_harvest_date"] = str(
+                                    h_cycle_start + timedelta(days=int(_lc_crop_days))
+                                )
+                        else:
+                            _insert_data.update({
+                                "status":            "harvested",
+                                "date":              str(h_date),
+                                "cycle_end_date":    str(h_date),
+                                "kg_harvested":      h_kg,
+                                "sale_price_per_kg": h_sale_price if h_sale_price > 0 else None,
+                                "sales_channel":     h_channel if h_channel != "— Not sold yet —" else None,
+                                "waste_pct":         h_rejection if h_rejection > 0 else None,
+                            })
+                        _ins_resp = supabase.table("harvest_logs").insert(_insert_data).execute()
+                        _new_cycle_id = _ins_resp.data[0]["id"] if _ins_resp.data else None
+
+                        # Write rack layer assignments if layers were selected
+                        if _new_cycle_id and "_ht_selected_rack" in dir() and _ht_selected_rack:
+                            _sel_layers = [
+                                a["layer"] for a in _ht_layer_assignments if a.get("selected") # Keep emoji in success message
+                            ]
+                            if _sel_layers:
+                                _rack_area = float(_ht_selected_rack.get("w", 0)) * float(_ht_selected_rack.get("h", 0))
+                                _assignment_rows = [
+                                    {
+                                        "cycle_id":    _new_cycle_id,
+                                        "farm_id":     active_farm["id"],
+                                        "rack_name":   h_zone,
+                                        "layer_index": _li,
+                                        "area_m2":     _rack_area if _rack_area > 0 else None,
+                                    }
+                                    for _li in _sel_layers
+                                ]
+                                supabase.table("rack_layer_assignments").insert(_assignment_rows).execute()
+
+                        if _is_open_cycle:
+                            _layer_msg = ""
+                            if "_ht_selected_rack" in dir() and _ht_selected_rack:
+                                _n_sel = len([a for a in _ht_layer_assignments if a.get("selected")])
+                                if _n_sel:
+                                    _layer_msg = f" Assigned to {_n_sel} layer(s) of {h_zone}."
+                            st.success( # Keep emoji in success message
+                                f"✅ Cycle opened: {h_crop} seeded on {h_cycle_start}.{_layer_msg} "
+                                f"Track it in the **Active Cycles** tab."
+                            )
+                        else:
+                            st.success(
+                                f"✅ Harvest logged: {h_kg:.2f} kg of {h_crop} on {h_date}."
+                            )
+                    except Exception as _ie:
+                        st.error(str(_ie))
             else:
                 try:
                     _insert_data = {
@@ -1531,8 +1626,8 @@ with tab2:
                         st.success(
                             f"✅ Harvest logged: {h_kg:.2f} kg of {h_crop} on {h_date}."
                         )
-                except Exception as e:
-                    st.error(str(e))
+                except Exception as _ie:
+                    st.error(str(_ie))
 
         st.divider()
         st.markdown("**Recent harvest entries**")

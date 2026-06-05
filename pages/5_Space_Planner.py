@@ -262,20 +262,56 @@ def _run_consistency_check(layout_metrics: dict, farm: dict) -> list:
             })
 
     # 3 — Net grow factor (rack footprint as % of building)
+    # 3 — Net grow factor (floor footprint fraction — standard racks only)
     model_ngf = float(farm.get("net_grow_factor") or 0)
     if model_ngf > 0 and lm["net_grow_pct"] > 0:
         diff_pp = abs(lm["net_grow_pct"] - model_ngf)
         if diff_pp > 10:
             conflicts.append({
-                "field":      "Net grow factor",
+                "field":      "Net grow factor (floor)",
                 "layout_val": f"{lm['net_grow_pct']:.0f}%",
                 "model_val":  f"{model_ngf:.0f}%",
                 "diff":       f"{diff_pp:.0f}pp difference",
                 "severity":   "warning",
-                "suggestion": "The fraction of floor space occupied by racks differs from the model. "
-                              "This affects yield per m² calculations.",
+                "suggestion": "The fraction of floor space occupied by racks differs from the model assumption. "
+                              "Note: wall racks add canopy vertically and are not reflected in floor %. "
+                              "See 'Effective canopy area' check below.",
                 "sync_key":   "net_grow_factor",
                 "sync_val":   lm["net_grow_pct"],
+            })
+
+    # 3b — Effective canopy area vs model EGA (catches wall rack contribution)
+    _ms_raw = farm.get("model_snapshot")
+    _ms = {}
+    if _ms_raw:
+        try:
+            _ms = json.loads(_ms_raw) if isinstance(_ms_raw, str) else (_ms_raw or {})
+        except Exception:
+            _ms = {}
+    _snap_data = _ms.get("plant", _ms) if _ms else {}
+    model_ega = float(_snap_data.get("effective_grow_area") or 0)
+    if model_ega > 0 and lm["canopy_area"] > 0:
+        diff_pct = (lm["canopy_area"] - model_ega) / model_ega * 100
+        abs_diff = abs(diff_pct)
+        if abs_diff > 15:
+            _direction = "larger" if diff_pct > 0 else "smaller"
+            conflicts.append({
+                "field":      "Effective canopy area",
+                "layout_val": f"{lm['canopy_area']:,.0f} m²",
+                "model_val":  f"{model_ega:,.0f} m² (saved model)",
+                "diff":       f"{abs_diff:.0f}% {_direction} than model",
+                "severity":   "critical" if abs_diff > 30 else "warning",
+                "suggestion": (
+                    f"Your drawn layout has {_direction} canopy than the saved ROI model assumed. "
+                    "Wall racks, additional layers, or changed rack dimensions are the usual cause. "
+                    "Re-run the ROI Calculator with the layout's canopy area to keep projections accurate."
+                    if diff_pct > 0 else
+                    f"Your drawn layout has less canopy than the saved ROI model assumed. "
+                    "You may have fewer racks drawn than the model expects, or the model "
+                    "uses a higher net grow factor. Check rack count and dimensions."
+                ),
+                "sync_key":   None,
+                "sync_val":   None,
             })
 
     # 4 — Walkways factor (path area as % of building)
@@ -405,11 +441,15 @@ def _render_consistency_panel(conflicts: list, farm: dict, layout_metrics: dict)
         _lmc1, _lmc2 = st.columns(2)
         with _lmc1:
             st.metric("Building area", f"{layout_metrics['building_area']:,.1f} m²")
-            st.metric("Rack canopy area", f"{layout_metrics['canopy_area']:,.1f} m²")
+            st.metric("Rack canopy area", f"{layout_metrics['canopy_area']:,.1f} m²",
+                      help="Effective growing surface including vertical wall racks")
             st.metric("Path area", f"{layout_metrics['path_area']:,.1f} m²")
         with _lmc2:
             st.metric("Max rack levels", layout_metrics["max_rack_levels"])
-            st.metric("Net grow factor", f"{layout_metrics['net_grow_pct']:.1f}%")
+            st.metric("Net grow factor (floor)", f"{layout_metrics['net_grow_pct']:.1f}%",
+                      help="Rack floor footprint as % of building — standard racks only")
+            st.metric("Canopy / Building", f"{layout_metrics['canopy_pct']:.1f}%",
+                      help="Total canopy area (incl. wall rack vertical surface) as % of building footprint")
             st.metric("Walkways factor", f"{layout_metrics['walkways_pct']:.1f}%")
             if layout_metrics["tank_volume_m3"] > 0:
                 st.metric("Tank volume", f"{layout_metrics['tank_volume_m3']:.1f} m³")
@@ -752,10 +792,27 @@ input[type=range]{accent-color:var(--accent-gold);}
       <button onclick="deleteSelected()" class="delete-btn">Delete Selected</button>
     </div>
 
+    <!-- Farm Summary Panel — shown in Ops mode when nothing selected -->
+    <div id="farm-summary-panel" style="display:none;flex-direction:column;gap:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="insp-title">Farm Summary</div>
+        <button onclick="closeFarmSummary()" class="btn" style="padding:3px 8px;font-size:10px;">✕</button>
+      </div>
+      <div id="farm-summary-content" style="display:flex;flex-direction:column;gap:5px;"></div>
+    </div>
+
     <div class="viewport-wrap">
+    <div class="viewport-wrap" id="viewport-wrap">
       <div id="container3d"></div>
       <div class="vp-badge">3D &middot; Forest Studio</div>
+      <div class="vp-badge" id="vp-badge-label">3D &middot; Forest Studio</div>
       <div class="vp-hint">drag to orbit &middot; scroll to zoom</div>
+      <button id="swap-view-btn" onclick="swapViews()" title="Swap 2D / 3D" style="
+        position:absolute;top:8px;right:8px;z-index:10;
+        padding:4px 9px;font-size:10px;font-weight:700;letter-spacing:.05em;
+        background:rgba(15,19,16,0.75);border:1px solid var(--line);color:var(--ink2);
+        border-radius:5px;cursor:pointer;backdrop-filter:blur(4px);transition:all .13s;
+      ">⇄ SWAP</button>
     </div>
   </div>
 </div>
@@ -901,12 +958,19 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 toolSel.disabled = true;
 
                 fetchAndApplyCycleData();  // Load live cycle data
+                // Show farm summary when entering ops mode with nothing selected
+                setTimeout(() => {
+                    if (!selection) openFarmSummary();
+                }, 200);
             } else {
                 btn.textContent = "COMMIT TO OPERATIONS";
                 btn.style.background = "var(--accent)"; btn.style.color = "var(--s0)";
                 status.textContent = "ARCHITECT MODE (EDITABLE)";
                 status.style.color = "var(--accent)";
                 toolSel.disabled = false;
+                const sp = document.getElementById('farm-summary-panel');
+                if (sp) sp.style.display = 'none';
+                document.getElementById('no-selection').style.display = 'block';
             }
             draw();
         }
@@ -1873,21 +1937,53 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
             if (activeCycles.length > 0) {
                 hasLiveData = true;
+                // Deduplicate by layer: each physical layer counts once.
+                // If two cycles cover the same layer on the same rack, take the
+                // higher-priority one (ready > growing > seeding). This prevents
+                // double-counting canopy when a rack has overlapping active cycles.
+                const layerCycleMap = {}; // layer_index → cycle
+                const priorityOf = { ready: 3, growing: 2, seeding: 1, failed: 0 };
                 activeCycles.forEach(c => {
-                    // Canopy from assignment area or rack area
-                    const cAssign = _liveAssignments.filter(a => a.cycle_id === c.id && a.rack_name === selection.name);
-                    const cArea   = cAssign.reduce((s, a) => s + (parseFloat(a.area_m2) || layerArea), 0)
-                                    || parseFloat(c.area_m2) || layerArea;
-                    liveCanopy += cArea;
+                    const assigns = _liveAssignments.filter(
+                        a => a.cycle_id === c.id && a.rack_name === selection.name
+                    );
+                    if (assigns.length > 0) {
+                        assigns.forEach(a => {
+                            const existing = layerCycleMap[a.layer_index];
+                            if (!existing || (priorityOf[c.status]||0) > (priorityOf[existing.status]||0)) {
+                                layerCycleMap[a.layer_index] = c;
+                            }
+                        });
+                    } else {
+                        // Zone-based fallback: assign all layers if no layer assignments exist
+                        for (let i = 0; i < (selection.layers || 1); i++) {
+                            const existing = layerCycleMap[i];
+                            if (!existing || (priorityOf[c.status]||0) > (priorityOf[existing.status]||0)) {
+                                layerCycleMap[i] = c;
+                            }
+                        }
+                    }
+                });
+                // Now aggregate from deduplicated layer map
+                const cropAreaMap = {}; // crop → total area (for annualised yield)
+                const effectiveLayerArea = canopy / Math.max(1, layers);
+                Object.values(layerCycleMap).forEach(c => {
+                    cropAreaMap[c.crop] = (cropAreaMap[c.crop] || 0) + effectiveLayerArea;
+                });
+                liveCanopy = Object.values(cropAreaMap).reduce((s, a) => s + a, 0);
+                
+                const pOvr = FARM_DATA ? parseFloat(FARM_DATA.price_override || 0) : 0;
+                const nGr  = FARM_DATA ? parseFloat(FARM_DATA.net_grow_factor || 0.85) : 0.85;
+                const lRt  = FARM_DATA ? parseFloat(FARM_DATA.loss_rate || 5) / 100 : 0.05;
 
-                    // Yield from crop data
-                    const d = getCropData(c.crop);
-                    const priceOverride = FARM_DATA ? parseFloat(FARM_DATA.price_override || 0) : 0;
-                    const effPrice = priceOverride > 0 ? priceOverride : d.p;
-                    const annualYield = cArea * d.y;
-                    liveYieldYear   += annualYield;
-                    liveYieldCycle  += annualYield / Math.max(1, Math.round(d.c));
-                    liveRevYear     += annualYield * effPrice;
+                Object.entries(cropAreaMap).forEach(([cropName, area]) => {
+                    const d = getCropData(cropName);
+                    const effPrice    = pOvr > 0 ? pOvr : d.p;
+                    const cycleYield  = area * d.y * nGr * (1 - lRt);
+                    const annualYield = cycleYield * d.c;
+                    liveYieldYear  += annualYield;
+                    liveYieldCycle += cycleYield;
+                    liveRevYear    += annualYield * effPrice;
                 });
             }
 
@@ -1926,13 +2022,13 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                     document.getElementById('kpi-canopy').innerText      = liveCanopy.toFixed(1) + ' m² (live)';
                     document.getElementById('kpi-yield-cycle').innerText  = liveYieldCycle.toFixed(0) + ' kg';
                     document.getElementById('kpi-yield-year').innerText   = Math.round(liveYieldYear).toLocaleString() + ' kg/yr';
-                    document.getElementById('kpi-revenue').innerText      = '€' + Math.round(liveRevYear).toLocaleString() + '/yr';
+                    document.getElementById('kpi-revenue').innerText      = '$' + Math.round(liveRevYear).toLocaleString() + '/yr';
                 } else {
                     // No cycles — show model forecast greyed
                     document.getElementById('kpi-canopy').innerText      = canopy.toFixed(1) + ' m²';
                     document.getElementById('kpi-yield-cycle').innerText  = (modelYield / Math.max(1, cyclesEst)).toFixed(0) + ' kg (est)';
                     document.getElementById('kpi-yield-year').innerText   = Math.round(modelYield).toLocaleString() + ' kg/yr (est)';
-                    document.getElementById('kpi-revenue').innerText      = '€' + Math.round(modelRev).toLocaleString() + '/yr (est)';
+                    document.getElementById('kpi-revenue').innerText      = '$' + Math.round(modelRev).toLocaleString() + '/yr (est)';
                 }
 
                 // Energy estimate — uses actual country industrial electricity rate from energy_labour module
@@ -1942,7 +2038,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 const energyCost  = canopy * kwh_per_m2_yr * _kwh_rate;
                 const revForMargin = hasLiveData ? liveRevYear : modelRev;
                 const margin = revForMargin > 0 ? ((revForMargin - energyCost) / revForMargin * 100) : 0;
-                document.getElementById('kpi-energy').innerText       = '€' + Math.round(energyCost).toLocaleString() + '/yr';
+                document.getElementById('kpi-energy').innerText       = '$' + Math.round(energyCost).toLocaleString() + '/yr';
                 document.getElementById('kpi-margin').innerText       = (margin > 0 ? '+' : '') + margin.toFixed(0) + '%';
                 document.getElementById('kpi-margin').style.color     = margin > 30 ? 'var(--accent)' : margin > 0 ? 'var(--accent-gold)' : 'var(--danger)';
             }
@@ -1962,8 +2058,8 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                     const deltaRev   = compareRev - mRev;
                     document.getElementById('kpi-model-canopy').innerText = modelTotalArea.toFixed(0) + ' m² total';
                     document.getElementById('kpi-model-yield').innerText  = Math.round(mKg).toLocaleString() + ' kg/yr';
-                    document.getElementById('kpi-model-rev').innerText    = '€' + Math.round(mRev).toLocaleString() + '/yr';
-                    document.getElementById('kpi-delta-rev').innerText    = (deltaRev >= 0 ? '+' : '') + '€' + Math.round(deltaRev).toLocaleString();
+                    document.getElementById('kpi-model-rev').innerText    = '$' + Math.round(mRev).toLocaleString() + '/yr';
+                    document.getElementById('kpi-delta-rev').innerText    = (deltaRev >= 0 ? '+' : '') + '$' + Math.round(deltaRev).toLocaleString();
                     document.getElementById('kpi-delta-rev').style.color  = deltaRev >= 0 ? 'var(--accent)' : 'var(--danger)';
                 } else {
                     ['kpi-model-canopy','kpi-model-yield','kpi-model-rev','kpi-delta-rev']
@@ -2052,12 +2148,12 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                     document.getElementById('kpi-tank-vol').innerText      = liveTankVol.toFixed(1) + ' m³ (live)';
                     document.getElementById('kpi-fish-cycle').innerText    = liveYieldCycle.toFixed(0) + ' kg';
                     document.getElementById('kpi-fish-year').innerText     = Math.round(liveYieldYear).toLocaleString() + ' kg/yr';
-                    document.getElementById('kpi-fish-rev').innerText      = '€' + Math.round(liveRevYear).toLocaleString() + '/yr';
+                    document.getElementById('kpi-fish-rev').innerText      = '$' + Math.round(liveRevYear).toLocaleString() + '/yr';
                 } else {
                     document.getElementById('kpi-tank-vol').innerText      = vol.toFixed(1) + ' m³';
                     document.getElementById('kpi-fish-cycle').innerText    = (modelYield / Math.max(1, cyclesEst)).toFixed(0) + ' kg (est)';
                     document.getElementById('kpi-fish-year').innerText     = Math.round(modelYield).toLocaleString() + ' kg/yr (est)';
-                    document.getElementById('kpi-fish-rev').innerText      = '€' + Math.round(modelRev).toLocaleString() + '/yr (est)';
+                    document.getElementById('kpi-fish-rev').innerText      = '$' + Math.round(modelRev).toLocaleString() + '/yr (est)';
                 }
                 const revForMargin = hasLiveData ? liveRevYear : modelRev;
                 const feedCostEst  = modelYield * (fData ? fData.feed_conversion_ratio || 1.5 : 1.5) * 1.20;
@@ -2081,8 +2177,8 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                     const deltaRev   = compareRev - mRev;
                     document.getElementById('kpi-model-tank-vol').innerText   = modelTotalVol.toFixed(0) + ' m³ total';
                     document.getElementById('kpi-model-fish-yield').innerText = Math.round(mKg).toLocaleString() + ' kg/yr';
-                    document.getElementById('kpi-model-fish-rev').innerText   = '€' + Math.round(mRev).toLocaleString() + '/yr';
-                    document.getElementById('kpi-delta-fish-rev').innerText   = (deltaRev >= 0 ? '+' : '') + '€' + Math.round(deltaRev).toLocaleString();
+                    document.getElementById('kpi-model-fish-rev').innerText   = '$' + Math.round(mRev).toLocaleString() + '/yr';
+                    document.getElementById('kpi-delta-fish-rev').innerText   = (deltaRev >= 0 ? '+' : '') + '$' + Math.round(deltaRev).toLocaleString();
                     document.getElementById('kpi-delta-fish-rev').style.color = deltaRev >= 0 ? 'var(--accent)' : 'var(--danger)';
                 } else {
                     ['kpi-model-tank-vol','kpi-model-fish-yield','kpi-model-fish-rev','kpi-delta-fish-rev']
@@ -2603,6 +2699,8 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         function showInspector(show) {
             document.getElementById('no-selection').style.display = show ? 'none' : 'block';
             document.getElementById('editor-ui').style.display = show ? 'flex' : 'none';
+            const sp = document.getElementById('farm-summary-panel');
+            if (sp) sp.style.display = show ? 'none' : 'none'; // always hide on selection
             if (!show) { hideOpsCyclePanel(); hideTankCyclePanel(); }
             if (show && selection) {
                 document.getElementById('objName').value = selection.name;
@@ -3476,8 +3574,186 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             document.getElementById('m-height').innerText=maxH.toFixed(1);
             document.getElementById('m-racks').innerText=rackCnt;
             document.getElementById('m-eff').innerText=bA>0?Math.round(tG/bA*100):0;
-            document.getElementById('m-yield').innerText=cA>0?Math.round(cA*4.2*13).toLocaleString()+' kg/yr':'—';
+            // Crop-aware yield: weighted average of actual crop assignments per rack
+            let totalYieldKg = 0, hasAssignments = false;
+            objects.forEach(o => {
+                if (o.type !== 'rack') return;
+                const wallLen = (o.rackType === 'wall') ? Math.max(o.w, o.h) : 0;
+                const rCanopy = (o.rackType === 'wall') ? wallLen * (o.height || 2.4) : o.w * o.h * (o.layers || 1);
+                if (rCanopy <= 0) return;
+                const crops = o.crops || [];
+                const layers = o.layers || 1;
+                let sumY = 0, sumC = 0, n = 0;
+                crops.slice(0, layers).forEach(c => {
+                    if (c && c !== 'None') {
+                        const d = getCropData(c); sumY += d.y; sumC += d.c; n++;
+                    }
+                });
+                if (n > 0) {
+                    hasAssignments = true;
+                    const netGrow = FARM_DATA ? parseFloat(FARM_DATA.net_grow_factor || 0.85) : 0.85;
+                    const lossRate = FARM_DATA ? parseFloat(FARM_DATA.loss_rate || 5) / 100 : 0.05;
+                    totalYieldKg += rCanopy * (sumY / n) * netGrow * (1 - lossRate);
+                } else {
+                    // no crop assigned: use lettuce default but mark as estimate
+                    const d = getCropData('default');
+                    const netGrow = FARM_DATA ? parseFloat(FARM_DATA.net_grow_factor || 0.85) : 0.85;
+                    totalYieldKg += rCanopy * d.y * netGrow;
+                }
+            });
+            const yieldLabel = hasAssignments
+                ? Math.round(totalYieldKg).toLocaleString() + ' kg/yr'
+                : (cA > 0 ? '~' + Math.round(totalYieldKg).toLocaleString() + ' kg/yr' : '—');
+            document.getElementById('m-yield').innerText = yieldLabel;
             checkSafety();
+        }
+
+        // ── View swap (2D ↔ 3D) ───────────────────────────────────────────────
+        let _viewSwapped = false;
+        function swapViews() {
+            _viewSwapped = !_viewSwapped;
+            const mainView    = document.getElementById('main-view');
+            const canvasCont  = document.getElementById('canvas-container');
+            const inspector   = document.getElementById('inspector');
+            const vpWrap      = document.getElementById('viewport-wrap');
+            const badge       = document.getElementById('vp-badge-label');
+
+            if (_viewSwapped) {
+                // 3D goes big (into main slot), inspector + small 2D go to right column
+                mainView.style.flexDirection = 'row';
+                // Move 3D viewport before inspector in the flex row, make it big
+                vpWrap.style.cssText = 'flex:2;border:1px solid var(--line);border-radius:10px;overflow:hidden;position:relative;height:auto;margin-top:0;flex-shrink:0;';
+                canvasCont.style.cssText = 'flex:1;background:var(--s0);border-radius:10px;position:relative;border:1px solid var(--line);overflow:hidden;min-width:180px;max-width:220px;';
+                inspector.style.maxWidth = '270px';
+                // Re-insert vpWrap as first child of mainView
+                mainView.insertBefore(vpWrap, mainView.firstChild);
+                if (badge) badge.textContent = '3D · Forest Studio';
+                // Resize 3D renderer
+                setTimeout(() => {
+                    if (typeof renderer !== 'undefined' && vpWrap.clientHeight > 0) {
+                        renderer.setSize(vpWrap.clientWidth, vpWrap.clientHeight);
+                        if (typeof camera !== 'undefined') { camera.aspect = vpWrap.clientWidth / vpWrap.clientHeight; camera.updateProjectionMatrix(); }
+                    }
+                    resizeCanvas();
+                }, 60);
+            } else {
+                // Back to normal: 2D big, 3D thumbnail in inspector column
+                vpWrap.style.cssText = 'border:1px solid var(--line);border-radius:9px;overflow:hidden;position:relative;margin-top:auto;flex-shrink:0;height:260px;';
+                canvasCont.style.cssText = 'flex:2;background:var(--s0);border-radius:10px;position:relative;border:1px solid var(--line);overflow:hidden;';
+                inspector.style.maxWidth = '270px';
+                // Move inspector back to last position, vpWrap inside inspector column
+                mainView.appendChild(inspector);
+                if (badge) badge.textContent = '3D · Forest Studio';
+                setTimeout(() => {
+                    if (typeof renderer !== 'undefined' && typeof cont3d !== 'undefined' && cont3d.clientHeight > 0) {
+                        renderer.setSize(cont3d.clientWidth, cont3d.clientHeight);
+                        if (typeof camera !== 'undefined') { camera.aspect = cont3d.clientWidth / cont3d.clientHeight; camera.updateProjectionMatrix(); }
+                    }
+                    resizeCanvas();
+                }, 60);
+            }
+        }
+
+        // ── Farm Summary ──────────────────────────────────────────────────────
+        function openFarmSummary() {
+            const panel = document.getElementById('farm-summary-panel');
+            const content = document.getElementById('farm-summary-content');
+            if (!panel || !content) return;
+
+            // Aggregate by crop across all racks
+            const cropMap = {}; // cropName → { canopy, yieldKg, revenueEur }
+            const netGrow  = FARM_DATA ? parseFloat(FARM_DATA.net_grow_factor || 0.85) : 0.85;
+            const lossRate = FARM_DATA ? parseFloat(FARM_DATA.loss_rate || 5) / 100 : 0.05;
+            const packCost = FARM_DATA ? parseFloat(FARM_DATA.packaging_cost || 0.3) : 0.3;
+            const priceOverride = FARM_DATA ? parseFloat(FARM_DATA.price_override || 0) : 0;
+
+            let totalCanopy = 0, totalYield = 0, totalRev = 0;
+
+            objects.forEach(o => {
+                if (o.type !== 'rack') return;
+                const wallLen  = (o.rackType === 'wall') ? Math.max(o.w, o.h) : 0;
+                const rCanopy  = (o.rackType === 'wall')
+                    ? wallLen * (o.height || 2.4)
+                    : o.w * o.h * (o.layers || 1);
+                if (rCanopy <= 0) return;
+                const layers = o.layers || 1;
+                const crops  = o.crops || [];
+                const layerCanopy = rCanopy / layers;
+
+                for (let i = 0; i < layers; i++) {
+                    const cropName = (crops[i] && crops[i] !== 'None') ? crops[i] : 'default';
+                    const d = getCropData(cropName);
+                    const effPrice = priceOverride > 0 ? priceOverride : d.p;
+                    const layerYield = layerCanopy * d.y * netGrow * (1 - lossRate);
+                    const layerRev   = layerYield * effPrice - (layerYield * packCost);
+                    const displayName = cropName === 'default' ? 'Unassigned' : cropName;
+                    if (!cropMap[displayName]) cropMap[displayName] = { canopy: 0, yieldKg: 0, revenueEur: 0 };
+                    cropMap[displayName].canopy     += layerCanopy;
+                    cropMap[displayName].yieldKg    += layerYield;
+                    cropMap[displayName].revenueEur += layerRev;
+                    totalCanopy += layerCanopy;
+                    totalYield  += layerYield;
+                    totalRev    += layerRev;
+                }
+            });
+
+            // Also summarise tanks
+            const tankSummary = [];
+            objects.forEach(o => {
+                if (o.type !== 'tank') return;
+                const vol = o.w * o.h * (o.height || 1.5);
+                const crop = (o.crops && o.crops[0] && o.crops[0] !== 'None') ? o.crops[0] : null;
+                tankSummary.push({ name: o.name, vol: vol.toFixed(1), crop: crop || '—' });
+            });
+
+            const sorted = Object.entries(cropMap).sort((a,b) => b[1].revenueEur - a[1].revenueEur);
+
+            let html = '';
+            if (sorted.length === 0 && tankSummary.length === 0) {
+                html = '<div style="color:var(--ink3);font-style:italic;font-size:11px;">No racks or tanks on this layout.</div>';
+            } else {
+                // Crop table
+                if (sorted.length > 0) {
+                    html += '<div class="kpi-card-hdr" style="margin-bottom:3px;">Crop Breakdown</div>';
+                    html += '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:3px 8px;font-size:10px;align-items:center;">';
+                    html += '<span style="color:var(--ink3);font-weight:700;">Crop</span><span style="color:var(--ink3);font-weight:700;text-align:right;">Canopy</span><span style="color:var(--ink3);font-weight:700;text-align:right;">Yield/yr</span><span style="color:var(--ink3);font-weight:700;text-align:right;">Rev/yr</span>';
+                    sorted.forEach(([name, v]) => {
+                        const isUnassigned = name === 'Unassigned';
+                        const nameColor = isUnassigned ? 'var(--ink3)' : 'var(--ink)';
+                        html += `<span style="color:${nameColor};font-style:${isUnassigned?'italic':'normal'}">${name}</span>`;
+                        html += `<span style="color:var(--accent);font-family:\'JetBrains Mono\',monospace;text-align:right;">${v.canopy.toFixed(1)}m²</span>`;
+                        html += `<span style="color:var(--accent-gold);font-family:\'JetBrains Mono\',monospace;text-align:right;">${Math.round(v.yieldKg).toLocaleString()} kg</span>`;
+                        html += `<span style="color:var(--plum);font-family:\'JetBrains Mono\',monospace;text-align:right;">$${Math.round(v.revenueEur).toLocaleString()}</span>`;
+                    });
+                    html += '</div>';
+                    html += `<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--line-soft);display:grid;grid-template-columns:1fr auto auto auto;gap:3px 8px;font-size:10px;">`;
+                    html += `<span style="color:var(--ink);font-weight:700;">TOTAL</span>`;
+                    html += `<span style="color:var(--accent);font-family:\'JetBrains Mono\',monospace;text-align:right;font-weight:700;">${totalCanopy.toFixed(1)}m²</span>`;
+                    html += `<span style="color:var(--accent-gold);font-family:\'JetBrains Mono\',monospace;text-align:right;font-weight:700;">${Math.round(totalYield).toLocaleString()} kg</span>`;
+                    html += `<span style="color:var(--plum);font-family:\'JetBrains Mono\',monospace;text-align:right;font-weight:700;">$${Math.round(totalRev).toLocaleString()}</span>`;
+                    html += '</div>';
+                }
+                // Tank table
+                if (tankSummary.length > 0) {
+                    html += '<div class="kpi-card-hdr" style="margin-top:8px;margin-bottom:3px;">Fish Tanks</div>';
+                    tankSummary.forEach(t => {
+                        html += `<div class="kpi-row"><span class="kl">${t.name}</span><span class="kv azure">${t.vol} m³</span><span class="kv" style="color:var(--ink3);font-size:10px;">${t.crop}</span></div>`;
+                    });
+                }
+            }
+
+            content.innerHTML = html;
+
+            // Hide editor-ui, show summary panel
+            document.getElementById('editor-ui').style.display = 'none';
+            document.getElementById('no-selection').style.display = 'none';
+            panel.style.display = 'flex';
+        }
+
+        function closeFarmSummary() {
+            const panel = document.getElementById('farm-summary-panel');
+            if (panel) panel.style.display = 'none';
+            document.getElementById('no-selection').style.display = 'block';
         }
 
         function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
