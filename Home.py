@@ -195,14 +195,14 @@ def _render_farm_setup():
         _mod_cols = st.columns(len(_mod_options))
         for _ci, (_mk, (_icon, _mlabel, _mdesc)) in enumerate(_mod_options.items()):
             with _mod_cols[_ci]:
-                _bg = "#e6ede4" if _mk == _current_mod else "#ffffff"
-                _border = "2px solid #2f5d3a" if _mk == _current_mod else "1px solid #d9d4c5"
+                _bg = "var(--accent-soft)" if _mk == _current_mod else "var(--surface)"
+                _border = "2px solid var(--accent)" if _mk == _current_mod else "1px solid var(--rule)"
                 st.markdown(
                     f'<div style="background:{_bg};border:{_border};border-radius:3px;'
                     f'padding:10px 8px;text-align:center;cursor:pointer;">'
                     f'<div style="font-size:20px;">{_icon}</div>'
                     f'<div style="font-size:12px;font-weight:700;margin:4px 0 2px;">{_mlabel}</div>'
-                    f'<div style="font-size:10px;color:#7a807a;">{_mdesc}</div>'
+                    f'<div style="font-size:10px;color:var(--ink-3);">{_mdesc}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
