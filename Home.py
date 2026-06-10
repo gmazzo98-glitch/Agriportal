@@ -454,11 +454,11 @@ def _render_farm_setup():
                 }) if _final["modality"].startswith("aquaponics") else {}
                 
                 # Remove auxiliary keys not present in the database schema
-                for _k in ["multi_crop", "crop_mix", "tank_volume_m3", "fish_species_temp"]:
+                for _k in ["multi_crop", "crop_mix", "tank_volume_m3", "fish_species_temp", "fish_species"]:
                     _final.pop(_k, None)
-                # fish_species is a valid DB column for aquaponics farms — keep it if present
-                if not _final.get("modality", "").startswith("aquaponics"):
-                    _final.pop("fish_species", None)
+                # For aquaponics farms, fish_species should be in metadata
+                if _final["modality"].startswith("aquaponics"):
+                    _final["metadata"]["fish_species"] = _data.get("fish_species")
 
                 _final["owner_id"] = current_user()
 
