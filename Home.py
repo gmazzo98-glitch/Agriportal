@@ -448,17 +448,20 @@ def _render_farm_setup():
                 _final = {**_data, **_fin}
                 _final["modality"]       = _data.get("modality","vertical_farm")
                 _final["agriculture_type"] = _final["modality"]
-                _final["metadata"]       = json.dumps({
-                    "tank_volume_m3": _data.get("tank_volume_m3"),
-                    "crop_source":    _data.get("crop_source"),
-                }) if _final["modality"].startswith("aquaponics") else {}
+                
+                # Build metadata dictionary before JSON serialization
+                _meta = {}
+                if _final["modality"].startswith("aquaponics"):
+                    _meta = {
+                        "tank_volume_m3": _data.get("tank_volume_m3"),
+                        "crop_source":    _data.get("crop_source"),
+                        "fish_species":   _data.get("fish_species")
+                    }
+                _final["metadata"] = json.dumps(_meta)
                 
                 # Remove auxiliary keys not present in the database schema
                 for _k in ["multi_crop", "crop_mix", "tank_volume_m3", "fish_species_temp", "fish_species"]:
                     _final.pop(_k, None)
-                # For aquaponics farms, fish_species should be in metadata
-                if _final["modality"].startswith("aquaponics"):
-                    _final["metadata"]["fish_species"] = _data.get("fish_species")
 
                 _final["owner_id"] = current_user()
 
