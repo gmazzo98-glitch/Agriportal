@@ -4221,8 +4221,6 @@ elif modality == "🌿 High-Tech Greenhouse":
     if abs(gh_kwh_override - _gh_kwh_original) > 0.0001:
         COUNTRIES[gh_country]["kwh"] = gh_kwh_override
     if _gh_mix_valid:
-        gh_r = _run_multicrop_generic(gh_inputs, _gh_crop_mix,
-                                       calculate_greenhouse, _gh_crop_data_dict)
         gh_r = _run_multicrop_generic(gh_inputs, _gh_mix,
                                        calculate_greenhouse, _gh_crop_data_dict)
     else:
@@ -4810,7 +4808,7 @@ elif modality == "🌿 High-Tech Greenhouse":
         _cdt.COUNTRIES[_cn] = _mod_c
         try:
             if _gh_mix_valid:
-                _res = _run_multicrop_generic(_mod_i, _gh_crop_mix,
+                _res = _run_multicrop_generic(_mod_i, _gh_mix,
                                               calculate_greenhouse, _gh_crop_data_dict)
             else:
                 _res = calculate_greenhouse(_mod_i)
@@ -5311,7 +5309,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         _cdt.COUNTRIES[_cn] = _mod_c
         try:
             if _aq_mix_valid:
-                _res = _run_multicrop_generic(_mod_i, _aq_crop_mix,
+                _res = _run_multicrop_generic(_mod_i, _aq_mix,
                                               calculate_greenhouse, _aq_plant_dict)
             else:
                 _res = calculate_greenhouse(_mod_i)
@@ -5327,7 +5325,7 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
         # Build plant-only inputs for multi-crop engine
         _aq_plant_base = {
             "country":            aq_inputs["country"],
-            "crop":               _aq_crop_mix[0]["crop"],
+            "crop":               _aq_mix[0]["crop"],
             "crop_source":        aq_inputs.get("plant_crop_source", "greenhouse"),
             "footprint":          aq_inputs["plant_footprint"],
             "automation":         aq_inputs["automation"],
@@ -5350,8 +5348,6 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             "ambient_temp_annual": aq_inputs.get("ambient_temp_annual"),
             "mean_annual_dli":    aq_inputs.get("mean_annual_dli"),
         }
-        _aq_plant_r = _run_multicrop_generic(
-            _aq_plant_base, _aq_mix, calculate_greenhouse, _aq_plant_dict)
         # Run fish side normally via calculate_aquaponics, extract fish result
         _aq_single_r = calculate_aquaponics(aq_inputs)
         _fr_multi     = _aq_single_r["fish"]
