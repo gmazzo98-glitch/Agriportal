@@ -5348,6 +5348,8 @@ elif modality in ("🐟 Decoupled Aquaponics", "♻️ Coupled Aquaponics"):
             "ambient_temp_annual": aq_inputs.get("ambient_temp_annual"),
             "mean_annual_dli":    aq_inputs.get("mean_annual_dli"),
         }
+        _aq_plant_r = _run_multicrop_generic(
+            _aq_plant_base, _aq_mix, calculate_greenhouse, _aq_plant_dict)
         # Run fish side normally via calculate_aquaponics, extract fish result
         _aq_single_r = calculate_aquaponics(aq_inputs)
         _fr_multi     = _aq_single_r["fish"]
