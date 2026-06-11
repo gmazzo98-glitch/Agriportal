@@ -62,10 +62,11 @@ def calculate_greenhouse(inputs: dict) -> dict:
     cycles_per_year = max(math.floor(365 / effective_cycle_days), 1)
 
     # Step 4c — yield per cycle per m²
+    # yield_h2 / yield_h3 are FRACTIONS of the first cut (same convention as VF data_tables)
     if harvest_mode == "2 Harvests":
-        yield_per_cycle = crop["yield"] + crop["yield_h2"]
+        yield_per_cycle = crop["yield"] * (1 + crop["yield_h2"])
     elif harvest_mode == "3 Harvests":
-        yield_per_cycle = crop["yield"] + crop["yield_h2"] + crop["yield_h3"]
+        yield_per_cycle = crop["yield"] * (1 + crop["yield_h2"] + crop["yield_h3"])
     else:
         yield_per_cycle = crop["yield"]
 

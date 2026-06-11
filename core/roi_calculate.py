@@ -90,7 +90,7 @@ def calculate(inputs: dict) -> dict:
     m_germination  = task_rate("germination", automation)       * trays * cycles_per_year
     m_transplant   = task_rate("transplanting", automation)     * trays * cycles_per_year
     m_movement     = task_rate("internal_movement", automation) * trays * cycles_per_year
-    m_harvest      = task_rate("harvest", automation)           * trays * harvest_count   # ← harvest_count fix
+    m_harvest      = task_rate("harvest", automation)           * trays * harvest_count * cycles_per_year
     m_post_harv    = task_rate("post_harvest", automation)      * total_production_gross
     m_washing      = 0
     m_drying       = 0

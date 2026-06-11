@@ -1,6 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # GREENHOUSE_CROPS
-# Units: cycle=days, yield=kg/m²/harvest, dli=mol/m²/day, water=L/m²/cycle
+# Units: cycle=days, yield=kg/m²/harvest (first cut), dli=mol/m²/day, water=L/m²/cycle
+# yield_h2 / yield_h3 = FRACTION of first-cut yield for regrowth harvests (0–1), matching VF convention
 # seed/substrate/nutrient=$/m²/cycle, natural_dli_fraction=0-1
 # Sources: Wageningen UR KWIN 2024, Tridge Market Intelligence
 # ─────────────────────────────────────────────────────────────────────────────

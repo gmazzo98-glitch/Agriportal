@@ -85,7 +85,7 @@ if active_farm:
         "country_kwh":    _country_kwh,
         "metadata":       json.loads(active_farm.get("metadata", "{}")) if isinstance(active_farm.get("metadata"), str) else active_farm.get("metadata", {}),
         "price_override": float(active_farm.get("price_override") or 0),
-        "net_grow_factor":float(active_farm.get("net_grow_factor") or 0.85),
+        "net_grow_factor":(lambda _v: _v / 100.0 if _v > 1.0 else _v)(float(active_farm.get("net_grow_factor") or 85.0)),
         "loss_rate":      float(active_farm.get("loss_rate") or 5),
         "packaging_cost": float(active_farm.get("packaging_cost") or 0.3),
         "model_snapshot": _model_snap,
