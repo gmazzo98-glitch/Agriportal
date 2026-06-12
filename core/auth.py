@@ -1,5 +1,7 @@
 """
 core/auth.py — Login gate for Agricultural Intelligence Portal.
+All user-table operations go through SECURITY DEFINER RPCs.
+The publishable key never touches the users table directly.
 """
 import hashlib
 import streamlit as st
@@ -14,29 +16,26 @@ def _hash(password: str) -> str:
 
 def _count_users() -> int:
     try:
-        resp = _get_supabase().table("users").select("id", count="exact").execute()
-        return resp.count or 0
+        resp = _get_supabase().rpc("count_users").execute()
+        return int(resp.data) if resp.data is not None else 0
     except Exception:
         return -1
 
 def _verify(username: str, password: str) -> bool:
     try:
-        resp = (
-            _get_supabase().table("users")
-            .select("password_hash")
-            .eq("username", username.strip().lower())
-            .single()
-            .execute()
-        )
-        return bool(resp.data and resp.data["password_hash"] == _hash(password))
+        resp = _get_supabase().rpc("verify_login", {
+            "p_username": username.strip().lower(),
+            "p_hash":     _hash(password),
+        }).execute()
+        return bool(resp.data)
     except Exception:
         return False
 
 def _create_user(username: str, password: str):
     try:
-        _get_supabase().table("users").insert({
-            "username":      username.strip().lower(),
-            "password_hash": _hash(password),
+        _get_supabase().rpc("create_user", {
+            "p_username": username.strip().lower(),
+            "p_hash":     _hash(password),
         }).execute()
         return True, ""
     except Exception as e:
@@ -47,14 +46,16 @@ def _create_user(username: str, password: str):
 
 def _delete_user(username: str):
     try:
-        _get_supabase().table("users").delete().eq("username", username).execute()
+        _get_supabase().rpc("delete_user", {
+            "p_username": username,
+        }).execute()
         return True, ""
     except Exception as e:
         return False, str(e)
 
 def _list_users():
     try:
-        resp = _get_supabase().table("users").select("username").order("username").execute()
+        resp = _get_supabase().rpc("list_users").execute()
         return [r["username"] for r in (resp.data or [])]
     except Exception:
         return []
@@ -138,7 +139,7 @@ def require_login() -> None:
         st.error("⚠️ Cannot connect to user database. Check Supabase credentials.")
         st.stop()
     else:
-        _render_login_or_register()   # same screen for first user and subsequent ones
+        _render_login_or_register()
 
 
 def current_user() -> str:
